@@ -20,6 +20,7 @@
 # https://eli.thegreenplace.net/2012/01/24/distributed-computing-in-python-with-multiprocessing/
 
 import cloudpickle
+import copy
 import hashlib
 import math
 import mpmath
@@ -252,8 +253,8 @@ def F_dsDNA_wlc(x, nbp=0, pitch=None, L_p=None, T=298.2):
     ----------
     x : float
         Extension (m)
-    L_0 : float
-        Contour length (m)
+    pitch : float
+        Contour length (m). Also denoted as 'L_0'.
     L_p : float
         Persistence length (m)
     T : float
@@ -872,7 +873,7 @@ def F_construct_3D(A0, x_ss=0.0, x_ds=0.0, f_dna=0.0, r0_sph=None,
     r0_sph : np.ndarray of type float, optional
         Radius vector of the bead at zero force, i.e. where the attachment
         point of the DNA is located on the bead, when the bead is able to
-        frealy orient itself in the trap and no external force is acting on it.
+        freely orient itself in the trap and no external force is acting on it.
         Vector is given in spherical units: [radius, θ, φ], where radius is the
         radius of the bead in m, θ is the inclination, and φ is the azimuth.
         Defaults to [0, 0, 0].
@@ -1653,7 +1654,9 @@ def F_0_3D(A0, nbs=0, S=None, L_p_ssDNA=None, z=None, T=298.2,
         Number of bases of ssDNA strand
     nbp : int
         Number of basepairs of dsDNA spacers
-    r0_sph : np.ndarray of type float
+    r0_sph : np.ndarray of type floatt
+        Radiust
+        Radiung_aasds
         Radius vector of the bead [radius, theta, phi] ([m, rad, rad]).
     kappa : np.ndarray of type float
         Stiffness for [x, y, z] of lever (handle) attached to DNA in N/m.
@@ -1746,15 +1749,14 @@ def E_pair(bases, NNBP=False, c=None, T=298.2):
     NNBP : bool
         Nearest-neighbour base-pair determination of the base-pair energies
     c : float
-        Concentration of monovalent cations in mol
+        Concentration of monovalent cations in mol, defaults to 1 M.
     T : float
         Temperature in K
     """
-    c = c or 1
+    c = 1 if c is None else c
     bases = bases.upper()
     if NNBP:
-        # Last base is before the pT 10 hairpin, i.e. the last base is followed
-        # by a T
+        # TODO: include proper energy term for hairpin
         e_pair = [_E_pair[''.join((a, b))]
                   for a, b
                   in zip(bases[:-1], bases[1:])]
@@ -1792,10 +1794,11 @@ def E_unzip_DNA(bases, nuz=0, NNBP=False, c=None, T=298.2):
         return 0
 
     if NNBP:
+        # TODO: include proper energy term for hairpin
         # Last base is before the pT 10 hairpin, i.e. the last base is followed
         # by a T
-        if nuz == len(bases):
-            bases = bases + 'T'
+        # if nuz == len(bases):
+        #     bases = bases + 'T'
         # include also the base following the last unzipped base for NNBP
         # calculation
         nuz += 1
@@ -2032,8 +2035,8 @@ def equilibrium_xfe0(x0, bases='', nuz=0, nbs=0, nbp=0, nbs_loop=0,
     return x0_ss, x0_ds, d2D, f0, e0
 
 
-def xfe0_all_nuz(x0, bases='', nbs=0, nbp=0, nbs_loop=0,
-                 r=0.0, z0=0.0, kappa=0.0,
+def xfe0_all_nuz(x0, h0=0.0, bases='', nbs=0, nbp=0, nbs_loop=0,
+                 radius=0.0, kappa=0.0,
                  S=None, L_p_ssDNA=None, z=None,
                  pitch=None, L_p_dsDNA=None,
                  NNBP=False, c=0, T=298.2,
@@ -2081,7 +2084,7 @@ def xfe0_all_nuz(x0, bases='', nbs=0, nbp=0, nbs_loop=0,
         x0_ss, x0_ds, d2D, f0, e0 = \
             equilibrium_xfe0(x0, bases=bases, nuz=nuz, nbs=nbs, nbp=nbp,
                              nbs_loop=nbs_loop,
-                             r=r, z0=z0, kappa=kappa,
+                             r=radius, z0=h0, kappa=kappa,
                              S=S, L_p_ssDNA=L_p_ssDNA, z=z,
                              pitch=pitch, L_p_dsDNA=L_p_dsDNA, NNBP=NNBP,
                              c=c, T=T, verbose=verbose)
@@ -2144,12 +2147,12 @@ def xfe0_all_nuz(x0, bases='', nbs=0, nbp=0, nbs_loop=0,
         'NUZ0_min': NUZ0_min,
         'NUZ0_max': NUZ0_max,
         'settings': {
+            'h0': h0,
             'bases': bases,
             'nbs': nbs,
             'nbp': nbp,
             'nbs_loop': nbs_loop,
-            'r': r,
-            'z0': z0,
+            'radius': radius,
             'kappa': kappa,
             'S': S,
             'L_p_ssDNA': L_p_ssDNA,
@@ -2249,8 +2252,8 @@ def approx_eq_nuz(x0, bases='', nbs=0, nbp=0,
     return nuz
 
 
-def xfe0_fast_nuz(x0, bases='', nuz_est=-1, nbs=0, nbp=0, nbs_loop=0,
-                  r=0.0, z0=0.0, kappa=0.0,
+def xfe0_fast_nuz(x0, h0=0.0, bases='', nuz_est=-1, nbs=0, nbp=0, nbs_loop=0,
+                  radius=0.0, kappa=0.0,
                   S=None, L_p_ssDNA=None, z=None,
                   pitch=None, L_p_dsDNA=None,
                   NNBP=False, c=0, T=298.2,
@@ -2293,7 +2296,7 @@ def xfe0_fast_nuz(x0, bases='', nuz_est=-1, nbs=0, nbp=0, nbs_loop=0,
     elif nuz_est < 0:
         # Autodetermine the approximate nuz which will be in equilibrium
         nuz_est = approx_eq_nuz(x0, bases=bases, nbs=nbs, nbp=nbp,
-                                r=r, z0=z0, kappa=kappa,
+                                r=radius, z0=h0, kappa=kappa,
                                 S=S, L_p_ssDNA=L_p_ssDNA, z=z,
                                 pitch=pitch, L_p_dsDNA=L_p_dsDNA,
                                 NNBP=NNBP, c=c, T=T,
@@ -2325,7 +2328,7 @@ def xfe0_fast_nuz(x0, bases='', nuz_est=-1, nbs=0, nbp=0, nbs_loop=0,
         x0_ss, x0_ds, d2D, f0, e0 = \
             equilibrium_xfe0(x0, bases=bases, nuz=nuz, nbs=nbs, nbp=nbp,
                              nbs_loop=nbs_loop,
-                             r=r, z0=z0, kappa=kappa,
+                             r=radius, z0=h0, kappa=kappa,
                              S=S, L_p_ssDNA=L_p_ssDNA, z=z,
                              pitch=pitch, L_p_dsDNA=L_p_dsDNA,
                              NNBP=NNBP, c=c, T=T, verbose=verbose)
@@ -2435,12 +2438,12 @@ def xfe0_fast_nuz(x0, bases='', nuz_est=-1, nbs=0, nbp=0, nbs_loop=0,
         'NUZ0_min': NUZ0_min,
         'NUZ0_max': NUZ0_max,
         'settings': {
+            'h0': h0,
             'bases': bases,
             'nbs': nbs,
             'nbp': nbp,
             'nbs_loop': nbs_loop,
-            'r': r,
-            'z0': z0,
+            'radius': radius,
             'kappa': kappa,
             'S': S,
             'L_p_ssDNA': L_p_ssDNA,
@@ -2472,8 +2475,8 @@ class _xfe0_fast_nuz_chained(object):
     def __init__(self):
         self.nuz_est = -1
 
-    def __call__(self, x0, bases='', nuz_est=-1, nbs=0, nbp=0, nbs_loop=0,
-                 r=0.0, z0=0.0, kappa=0.0,
+    def __call__(self, x0, h0=0.0, bases='', nuz_est=-1, nbs=0, nbp=0, nbs_loop=0,
+                 radius=0.0, kappa=0.0,
                  S=None, L_p_ssDNA=None, z=None,
                  pitch=None, L_p_dsDNA=None,
                  NNBP=False, c=0, T=298.2,
@@ -2482,9 +2485,9 @@ class _xfe0_fast_nuz_chained(object):
         if nuz_est == -1:
             nuz_est = self.nuz_est
         # print('x0 {}, nuz_est {}'.format(x0, nuz_est))
-        r = xfe0_fast_nuz(x0, bases=bases, nuz_est=nuz_est, nbs=nbs, nbp=nbp,
+        r = xfe0_fast_nuz(x0, h0=h0, bases=bases, nuz_est=nuz_est, nbs=nbs, nbp=nbp,
                           nbs_loop=nbs_loop,
-                          r=r, z0=z0, kappa=kappa,
+                          radius=radius, kappa=kappa,
                           S=S, L_p_ssDNA=L_p_ssDNA, z=z,
                           pitch=pitch, L_p_dsDNA=L_p_dsDNA,
                           NNBP=NNBP, c=c, T=T,
@@ -2493,9 +2496,9 @@ class _xfe0_fast_nuz_chained(object):
         return r
 
 
-def unzipping_force_energy(x0_min, x0_max, resolution=1e-9, processes=8,
+def unzipping_force_energy(x0_min, x0_max, h0=0.0, resolution=1e-9, processes=8,
                            bases='', nbs=0, nbp=0, nbs_loop=0,
-                           r=0.0, z0=0.0, kappa=0.0,
+                           radius=0.0, kappa=0.0,
                            S=None, L_p_ssDNA=None, z=None,
                            pitch=None, L_p_dsDNA=None,
                            NNBP=False, c=0, T=298.2,
@@ -2540,9 +2543,9 @@ def unzipping_force_energy(x0_min, x0_max, resolution=1e-9, processes=8,
               '...'.format(x0), end='', flush=True)
         # return xfe0_fast_nuz(x0, bases=bases, nuz_est=nuz_est, nbs=nbs,
         #                      nbp=nbp, nbs_loop=nbs_loop, kappa=kappa,
-        return xfe0_fast_nuz(x0=x0, bases=bases, nbs=nbs, nbp=nbp,
+        return xfe0_fast_nuz(x0=x0, h0=h0, bases=bases, nbs=nbs, nbp=nbp,
                              nbs_loop=nbs_loop,
-                             r=r, z0=z0, kappa=kappa,
+                             radius=radius, kappa=kappa,
                              S=S, L_p_ssDNA=L_p_ssDNA, z=z,
                              pitch=pitch, L_p_dsDNA=L_p_dsDNA,
                              NNBP=NNBP, c=c, T=T,
@@ -2569,13 +2572,13 @@ def unzipping_force_energy(x0_min, x0_max, resolution=1e-9, processes=8,
         'settings': {
             'x0_min': x0_min,
             'x0_max': x0_max,
+            'h0': h0,
             'resolution': resolution,
             'bases': bases,
             'nbs': nbs,
             'nbp': nbp,
             'nbs_loop': nbs_loop,
-            'r': r,
-            'z0': z0,
+            'radius': radius,
             'kappa': kappa,
             'S': S,
             'L_p_ssDNA': L_p_ssDNA,
@@ -2596,8 +2599,8 @@ def unzipping_force_energy(x0_min, x0_max, resolution=1e-9, processes=8,
     return XFE
 
 
-def plot_unzip_energy(x0, bases='', nuz_est=-1, nbs=0, nbp=0, nbs_loop=0,
-                      r=0.0, z0=0.0, kappa=0.0,
+def plot_unzip_energy(x0, h0=0.0, bases='', nuz_est=-1, nbs=0, nbp=0, nbs_loop=0,
+                      radius=0.0, kappa=0.0,
                       S=None, L_p_ssDNA=None, z=None,
                       pitch=None, L_p_dsDNA=None,
                       NNBP=False, c=0, T=298.2,
@@ -2607,18 +2610,18 @@ def plot_unzip_energy(x0, bases='', nuz_est=-1, nbs=0, nbp=0, nbs_loop=0,
                       axes=None):
 
     if compatibility:
-        xfe0 = xfe0_all_nuz(x0, bases=bases, nbs=nbs, nbp=nbp,
+        xfe0 = xfe0_all_nuz(x0, h0=h0, bases=bases, nbs=nbs, nbp=nbp,
                             nbs_loop=nbs_loop,
-                            r=r, z0=z0, kappa=kappa,
+                            radius=radius, kappa=kappa,
                             S=S, L_p_ssDNA=L_p_ssDNA, z=z,
                             pitch=pitch, L_p_dsDNA=L_p_dsDNA,
                             NNBP=NNBP, c=c, T=T,
                             boltzmann_factor=boltzmann_factor,
                             verbose=verbose)
     else:
-        xfe0 = xfe0_fast_nuz(x0, bases=bases, nuz_est=nuz_est, nbs=nbs,
+        xfe0 = xfe0_fast_nuz(x0, h0=h0, bases=bases, nuz_est=nuz_est, nbs=nbs,
                              nbp=nbp, nbs_loop=nbs_loop,
-                             r=r, z0=z0, kappa=kappa,
+                             radius=radius, kappa=kappa,
                              S=S, L_p_ssDNA=L_p_ssDNA, z=z,
                              pitch=pitch, L_p_dsDNA=L_p_dsDNA,
                              NNBP=NNBP, c=c, T=T,
@@ -3203,6 +3206,103 @@ def unzipping_force_energy_rot(x0_min, x0_max, y0=0.0, h0=0.0, resolution=1e-9,
     return XFE
 
 
+def simulation_settings(simulation_file, **kwargs):
+    # Get simulation settings
+    with open(simulation_file,'rb') as f:
+        simulation = pickle.load(f)
+    simulation['settings'].update(kwargs)
+    return {'settings': simulation['settings']}
+
+
+def get_unzipping_simulation(simulation_settings_file, simulations_file=None, save=True, **kwargs):
+    simulations_file = simulations_file or 'simulations.p'
+    # Get simulation settings
+    simulation = simulation_settings(simulation_settings_file, **kwargs)
+    hash_key = get_key(**simulation['settings'])
+    try:
+        with open(simulations_file,'rb') as f:
+            simulations = pickle.load(f)
+    except FileNotFoundError:
+        simulations = {}
+    if hash_key in simulations:
+        return simulations[hash_key]
+    else:
+        # Do the simulation
+        simulation = simulate_unzipping(simulation)
+    # Save the simulation
+    if save:
+        try:
+            with open(simulations_file,'rb+') as f:
+                simulations = pickle.load(f)
+                f.seek(0)
+                simulations[hash_key] = copy.deepcopy(simulation)
+                pickle.dump(simulations, f)
+        except FileNotFoundError:
+            with open(simulations_file, 'wb') as f:
+                simulations = {}
+                simulations[hash_key] = copy.deepcopy(simulation)
+                pickle.dump(simulations, f)
+    return simulation
+
+
+def simulate_unzipping(simulation_settings, processes=8):
+    simulation = simulation_settings
+    # Set the unzipping construct parameters
+    bases = simulation['settings']['bases']
+    nbs = simulation['settings']['nbs']
+    nbp = simulation['settings']['nbp']
+    nbs_loop = simulation['settings']['nbs_loop']
+    S = simulation['settings']['S']
+    L_p_ssDNA = simulation['settings']['L_p_ssDNA']
+    z = simulation['settings']['z']
+    pitch = simulation['settings']['pitch']
+    L_p_dsDNA = simulation['settings']['L_p_dsDNA']
+
+    # Set other experimental parameters
+    radius = simulation['settings']['radius']
+    angles_r0 = simulation['settings']['angles_r0']
+    kappa = simulation['settings']['kappa']
+    k_rot = simulation['settings']['k_rot']
+    c = simulation['settings']['c']
+    T = simulation['settings']['T']
+
+    # Set parameters for the simulation
+    NNBP = simulation['settings']['NNBP']
+    x0_min = simulation['settings']['x0_min']
+    x0_max = simulation['settings']['x0_max']
+    h0 = simulation['settings']['h0']
+    y0 = simulation['settings']['y0']
+    resolution = simulation['settings']['resolution']
+    boltzmann_factor = simulation['settings']['boltzmann_factor']
+    
+    # If no rotation
+    if angles_r0 is None and k_rot is None and y0 == 0.0 and len(kappa) == 2:
+        # Simulate in 2D only (3x as fast as 3D without rotation)
+        XFE, XFE0 = unzipping_force_energy(x0_min, x0_max, h0=h0, resolution=resolution, processes=processes,
+                                           bases=bases, nbs=nbs, nbp=nbp, nbs_loop=nbs_loop,
+                                           radius=radius, kappa=kappa,
+                                           S=S, L_p_ssDNA=L_p_ssDNA, z=z,
+                                           pitch=pitch, L_p_dsDNA=L_p_dsDNA,
+                                           NNBP=NNBP, c=c, T=T,
+                                           boltzmann_factor=boltzmann_factor,
+                                           individual_points=True)
+    else:
+        # Simulate in 3D
+        XFE, XFE0 = unzipping_force_energy_rot(x0_min, x0_max, y0=y0, h0=h0, resolution=resolution, processes=processes,
+                                               bases=bases, nbs=nbs, nbp=nbp, nbs_loop=nbs_loop,
+                                               radius=radius, angles_r0=angles_r0, kappa=kappa, k_rot=k_rot,
+                                               S=S, L_p_ssDNA=L_p_ssDNA, z=z,
+                                               pitch=pitch, L_p_dsDNA=L_p_dsDNA,
+                                               NNBP=NNBP, c=c, T=T,
+                                               boltzmann_factor=boltzmann_factor,
+                                               individual_points=True)
+
+    simulation['XFE'] = XFE
+    simulation['XFE0'] = XFE0
+
+    return simulation
+
+
 def plot_unzip_energy_rot(x0, y0=0.0, h0=0.0, bases='', nuz_est=-1, nbs=0,
                           nbp=0, nbs_loop=0,
                           radius=0.0, angles_r0=None, kappa=None, k_rot=None,
@@ -3268,6 +3368,128 @@ def plot_unzip_energy_rot(x0, y0=0.0, h0=0.0, bases='', nuz_est=-1, nbs=0,
     return fig, ax, ax2
 
 
+def plot_simulated_force_extension(simulation, x=None, y=None, yXYZ=None, axes=None, ylim=None):
+    # Set the unzipping construct parameters
+    #bases = simulation['settings']['bases']
+    #nbs = simulation['settings']['nbs']
+    #nbp = simulation['settings']['nbp']
+    #nbs_loop = simulation['settings']['nbs_loop']
+    #S = simulation['settings']['S']
+    #L_p_ssDNA = simulation['settings']['L_p_ssDNA']
+    #z = simulation['settings']['z']
+    #pitch = simulation['settings']['pitch']
+    #L_p_dsDNA = simulation['settings']['L_p_dsDNA']
+
+    # Set other experimental parameters
+    #radius = simulation['settings']['radius']
+    #angles_r0 = simulation['settings']['angles_r0']
+    kappa = simulation['settings']['kappa']
+    k_rot = simulation['settings']['k_rot']
+    #c = simulation['settings']['c']
+    #T = simulation['settings']['T']
+
+    # Set parameters for the simulation
+    #NNBP = simulation['settings']['NNBP']
+    #x0_min = simulation['settings']['x0_min']
+    #x0_max = simulation['settings']['x0_max']
+    #h0 = simulation['settings']['h0']
+    #y0 = simulation['settings']['y0']
+    #resolution = simulation['settings']['resolution']
+    #boltzmann_factor = simulation['settings']['boltzmann_factor']
+
+    # Set variables of simulated data
+    XFE, XFE0 = simulation['XFE'], simulation['XFE0']
+
+    # Assign variables to be plotted
+    # extension, number of unzipped basepairs, force
+    # extension of the construct
+    X = XFE['X']
+    # 3D position of the stage
+    #X0 = XFE['A0'][:,0]
+    # average number of unzipped basepairs
+    NUZ0_avg = XFE['NUZ0_avg']
+    # most probable number of unzipped basepairs
+    #NUZ0_max = XFE['NUZ0_max_W0']
+    # Apparent extension (taking into consideration rotation of bead)
+    try:
+        EXT_APP_avg = XFE['EXT_APP_avg']
+    except KeyError:
+        # Fallback to extension of the construct
+        EXT_APP_avg = X
+        
+    # Average force acting on the construct
+    #F0_avg = XFE['F0_avg']
+    # Most probable force acting on the construct
+    #F0_max = XFE['F0_max_W0']
+    # Average force acting on the bead
+    F0d_avg = np.array([np.sqrt(((xfe0['D0_avg'] * kappa)**2).sum()) for xfe0 in XFE0])
+        # should be the same as:
+        #F0d_avg = np.array([(np.sqrt(((xfe0['D0'] * kappa)**2).sum(axis=1)) * xfe0['W0'] / xfe0['W0'].sum()).sum() for xfe0 in XFE0])
+    F0XYZ_avg = np.array([np.sqrt(((xfe0['D0_avg'] * kappa)**2)) for xfe0 in XFE0])
+    # Bead rotation in difference of angles of vectors r0 and r of the bead 
+    try:
+        THETA_DIFF = XFE['DA0_avg'][:,0]
+    except KeyError:
+        THETA_DIFF = np.zeros_like(X)
+
+    # Select data which was properly fitted
+    if k_rot is None or np.all(k_rot == 0):
+        idx_valid = (X != 0)
+    else:
+        idx_valid = np.logical_and(abs(THETA_DIFF) > 0*math.pi/180, abs(THETA_DIFF) < 45*math.pi/180)
+
+    if axes is None:
+        fig, axes = plt.subplots(2, 1)
+    else:
+        fig = axes[0].get_figure()
+
+    ax = axes[0]
+    ax2 = ax.twinx()
+    ax2._get_lines.prop_cycler = ax._get_lines.prop_cycler
+
+    # Plot simulated unzipping curve
+    ax.plot(EXT_APP_avg[idx_valid]*1e9, F0d_avg[idx_valid]*1e12, label='Force bead')
+
+    # Plot measured unzipping curve
+    if x is not None and y is not None:
+        ax.plot(x, y)
+
+    # Plot number of simulated unzipped basepairs
+    ax2.plot(EXT_APP_avg[idx_valid]*1e9, NUZ0_avg[idx_valid], color='cyan')
+
+    ax.grid(True)
+
+    ax.set_xlabel('(Apparent) extension of the construct (nm)')
+    ax.set_ylabel('Force (pN)')
+    ax2.set_ylabel('Number of unzipped basepairs')
+
+    ylim = ylim or (-1, 18)
+    ax.set_ylim(ylim)
+
+    ax = axes[1]
+    ax2 = plt.twinx(ax=ax)
+    ax2.xaxis.set_visible(False)
+
+    # Plot simulated unzipping curves
+    ax.plot(EXT_APP_avg[idx_valid]*1e9, F0XYZ_avg[idx_valid]*1e12)
+
+    # Plot measured unzipping curves
+    if x is not None and yXYZ is not None:
+        ax.plot(x, np.abs(yXYZ))
+
+    # Plot plot differenc of angle r0 and r
+    ax2.plot(EXT_APP_avg[idx_valid]*1e9, THETA_DIFF[idx_valid]*180/math.pi, color='cyan')
+
+    ax.grid(True)
+
+    ax.set_xlabel('(Apparent) extension of the construct (nm)')
+    ax.set_ylabel('Force (pN)')
+    ax2.set_ylabel('Angle theta difference (°)')
+
+    ax.set_ylim(ylim)
+    return fig, axes
+
+
 def get_key_OLD(radius, angles_r0, kappa, k_rot):
     hasher = hashlib.md5()
     hasher.update(bytes(str(radius), 'ASCII'))
@@ -3292,9 +3514,11 @@ def get_key(x0_min, x0_max, y0, h0, resolution,
               pitch, L_p_dsDNA,
               NNBP, c, T, boltzmann_factor]:
         hasher.update(bytes(str(c), 'ASCII'))
-    hasher.update(angles_r0)
+    if angles_r0 is not None:
+        hasher.update(angles_r0)
     hasher.update(kappa)
-    hasher.update(k_rot)
+    if k_rot is not None:
+        hasher.update(k_rot)
     key = hasher.hexdigest()
     return key
 
