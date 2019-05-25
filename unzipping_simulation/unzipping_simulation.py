@@ -1688,54 +1688,119 @@ def F_0_3D(A0, nbs=0, S=None, L_p_ssDNA=None, z=None, T=298.2,
     return f0, d, d_angles, ext_app
 
 
-_T = 298  # Energies from Huguet 2010 are given for 298 K
 _E_pair = {
-    # Huguet2010, table 1, 1M NaCl
-    'GC': 2.36*kcal/Na/_T,
-    'CG': 2.37*kcal/Na/_T,
-    'CC': 1.93*kcal/Na/_T,
-    'GG': 1.93*kcal/Na/_T,  # ?
-    'GA': 1.47*kcal/Na/_T,
-    'CT': 1.47*kcal/Na/_T,  # ?
-    'CA': 1.66*kcal/Na/_T,
-    'GT': 1.4*kcal/Na/_T,  # ?
-    'AC': 1.49*kcal/Na/_T,
-    'TG': 1.49*kcal/Na/_T,  # ?
-    'AG': 1.36*kcal/Na/_T,
-    'TC': 1.36*kcal/Na/_T,  # ?
-    'AA': 1.23*kcal/Na/_T,
-    'TT': 1.23*kcal/Na/_T,  # ?
-    'AT': 1.17*kcal/Na/_T,
-    'TA': 0.84*kcal/Na/_T,
-    'Loop': -2.43*cal/Na/_T,
-    # Ander 2011, 10 mM MgCl?!
-    'A': 1.2*kB,
-    'T': 1.2*kB,
-    'G': 3.4*kB,
-    'C': 3.4*kB
+    # Huguet et. al. 2010, table 1, 1M NaCl
+    # Energies from Huguet 2010 are given for 298 K
+
+    # one Purine and one Pyrimidine or
+    # two succesive Purines/Pyrimidines with same bases
+    'AA': 1.23*kcal/Na,
+    'TT': 1.23*kcal/Na,  #
+    'AC': 1.49*kcal/Na,
+    'TG': 1.49*kcal/Na,  #
+    'AG': 1.36*kcal/Na,
+    'TC': 1.36*kcal/Na,  #
+    'CA': 1.66*kcal/Na,
+    'GT': 1.66*kcal/Na,  #
+    'CC': 1.93*kcal/Na,
+    'GG': 1.93*kcal/Na,  #
+    'GA': 1.47*kcal/Na,
+    'CT': 1.47*kcal/Na,  #
+
+    # two succesive Purines/Pyrimidines with different bases
+    'AT': 1.17*kcal/Na,
+    'CG': 2.37*kcal/Na,
+    'GC': 2.36*kcal/Na,
+    'TA': 0.84*kcal/Na,
+
+    # TODO: include proper energy term for hairpin
+    'L': -2.43*kcal/Na,  # ? Loop
+
+    # Ander PhD thesis 2011
+    # kB*T = 4.1 pN*nm -> T ~ 298 K
+    'A': 1.2*kB*298,
+    'T': 1.2*kB*298,
+    'G': 3.4*kB*298,
+    'C': 3.4*kB*298
+
+    # energies Bockelmann et. al. 1997
+    # for S=800pN, L_p_ssDNA=0.75nm, z=0.61nm/bp
+    #   'AT': 1.3*kB*298
+    #   'GC': 2.9*kB*298
+    # for S=800pN, L_p_ssDNA=1.35nm, z=0.56nm/bp
+    #   'AT': 1.6*kB*298
+    #   'GC': 3.2*kB*298
 }
+
 _M_pair = {
-    # Huguet2010, table 1, NaCl concentration correction factor
-    'GC': 0.08*kcal/Na/_T,
-    'CG': 0.13*kcal/Na/_T,
-    'CC': 0.06*kcal/Na/_T,
-    'GG': 0.06*kcal/Na/_T,  # ?
-    'GA': 0.15*kcal/Na/_T,
-    'CT': 0.15*kcal/Na/_T,  # ?
-    'CA': 0.09*kcal/Na/_T,
-    'GT': 0.09*kcal/Na/_T,  # ?
-    'AC': 0.10*kcal/Na/_T,
-    'TG': 0.10*kcal/Na/_T,  # ?
-    'AG': 0.070*kcal/Na/_T,
-    'TC': 0.070*kcal/Na/_T,  # ?
-    'AA': 0.145*kcal/Na/_T,
-    'TT': 0.145*kcal/Na/_T,  # ?
-    'AT': 0.12*kcal/Na/_T,
-    'TA': 0.09*kcal/Na/_T
+    # Huguet et. al. 2010, table 1, NaCl concentration correction factor
+    # Energies from Huguet et. al. 2010 are given for 298 K
+    'AA': 0.145*kcal/Na,
+    'TT': 0.145*kcal/Na,  #
+    'AC': 0.099*kcal/Na,
+    'TG': 0.099*kcal/Na,  #
+    'AG': 0.070*kcal/Na,
+    'TC': 0.070*kcal/Na,  #
+    'CA': 0.091*kcal/Na,
+    'GT': 0.091*kcal/Na,  #
+    'CC': 0.063*kcal/Na,
+    'GG': 0.063*kcal/Na,  #
+    'GA': 0.155*kcal/Na,
+    'CT': 0.155*kcal/Na,  #
+
+    'AT': 0.117*kcal/Na,
+    'CG': 0.132*kcal/Na,
+    'GC': 0.079*kcal/Na,
+    'TA': 0.091*kcal/Na,
+
+    # TODO: include proper energy term for hairpin
+    'L': 0*kcal/Na  # ? Loop
+}
+
+_DH_pair = {
+    # Huguet et. al. 2010, table 2, enthalpy (kcal/mol)
+    'AA': 7.28*kcal/Na,
+    'TT': 7.28*kcal/Na,  #
+    'AC': 5.80*kcal/Na,
+    'TG': 5.80*kcal/Na,  #
+    'AG': 5.21*kcal/Na,
+    'TC': 5.21*kcal/Na,  #
+    'CA': 8.96*kcal/Na,
+    'GT': 8.96*kcal/Na,  #
+    'CC': 8.57*kcal/Na,
+    'GG': 8.57*kcal/Na,  #
+    'GA': 8.16*kcal/Na,
+    'CT': 8.16*kcal/Na,  #
+
+    'AT': 4.63*kcal/Na,
+    'CG': 9.66*kcal/Na,
+    'GC': 10.10*kcal/Na,
+    'TA': 8.31*kcal/Na
+}
+
+_DS_pair = {
+    # Huguet et. al. 2010, table 2, entropy (cal/mol)
+    'AA': 20.28*cal/Na,
+    'TT': 20.28*cal/Na,  #
+    'AC': 14.46*cal/Na,
+    'TG': 14.46*cal/Na,  #
+    'AG': 12.89*cal/Na,
+    'TC': 12.89*cal/Na,  #
+    'CA': 24.48*cal/Na,
+    'GT': 24.48*cal/Na,  #
+    'CC': 22.30*cal/Na,
+    'GG': 22.30*cal/Na,  #
+    'GA': 22.46*cal/Na,
+    'CT': 22.46*cal/Na,  #
+
+    'AT': 11.62*cal/Na,
+    'CG': 24.43*cal/Na,
+    'GC': 25.96*cal/Na,
+    'TA': 25.06*cal/Na
 }
 
 
-def E_pair(bases, NNBP=False, c=None, T=298.2):
+def E_pair(bases, NNBP=False, c=None, T=None):
     """
     Work necessary to separate base pairs A-T and G-C of a DNA double helix.
 
@@ -1751,7 +1816,7 @@ def E_pair(bases, NNBP=False, c=None, T=298.2):
     c : float
         Concentration of monovalent cations in mol, defaults to 1 M.
     T : float
-        Temperature in K
+        T is not considered
     """
     c = 1 if c is None else c
     bases = bases.upper()
@@ -1763,11 +1828,58 @@ def E_pair(bases, NNBP=False, c=None, T=298.2):
         m_pair = [_M_pair[''.join((a, b))]
                   for a, b
                   in zip(bases[:-1], bases[1:])]
-        e_pair = np.array(e_pair)*T
-        m_pair = np.array(m_pair)*T
+        e_pair = np.array(e_pair)
+        m_pair = np.array(m_pair)
         e = e_pair + m_pair * np.log(c)
     else:
-        e = np.array([_E_pair[base] for base in bases])*T
+        e = np.array([_E_pair[base] for base in bases])
+    return e
+
+
+def E_pair_T(bases, NNBP=False, c=None, T=298.2):
+    """
+    Work necessary to separate base pairs A-T and G-C of a DNA double helix.
+
+    Includes the contributions of unpairing, unstacking, and rearrangement of
+    bases.
+
+    Parmeters
+    ---------
+    bases : str
+        Sequence of bases 'A', 'T', 'C', and 'G'.
+    NNBP : bool
+        Nearest-neighbour base-pair determination of the base-pair energies
+    c : float
+        Concentration of monovalent cations in mol
+    T : float
+        Temperature in K
+    """
+    c = 1 if c is None else c
+    bases = bases.upper()
+    if NNBP:
+        dh_pair = [_DH_pair[''.join((a, b))]
+                   for a, b
+                   in zip(bases[:-1], bases[1:])]
+        ds_pair = [_DS_pair[''.join((a, b))]
+                   for a, b
+                   in zip(bases[:-1], bases[1:])]
+        m_pair = [_M_pair[''.join((a, b))]
+                  for a, b
+                  in zip(bases[:-1], bases[1:])]
+        dh_pair = np.array(dh_pair)
+        ds_pair = np.array(ds_pair)
+        m_pair = np.array(m_pair)
+
+        # salt dependent entropy
+        # only entropy depends on salt concentration
+        ds_pair_salt = ds_pair - m_pair/298 * np.log(c)
+
+        # temperature dependent energy
+        e_pair = dh_pair - T*ds_pair_salt
+
+        e = e_pair  # + m_pair * np.log(c)
+    else:
+        e = np.array([_E_pair[base] for base in bases])
     return e
 
 
