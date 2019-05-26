@@ -1916,8 +1916,11 @@ def E_unzip_DNA(bases, nuz=0, NNBP=False, c=None, e_loop=0.0, T=298.2):
     
     # Include proper energy term for terminal hairpin, only if all bps are
     # unzipped
-    if nuz != len(bases):
+    if nuz == len(bases):
+        e_loop = e_loop*kcal/Na
+    else:
         e_loop = 0.0
+    
 
     #if NNBP:
         # TODO: include proper energy term for the first and last bp
