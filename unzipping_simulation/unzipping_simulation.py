@@ -1905,8 +1905,7 @@ def E_unzip_DNA(bases, nuz=0, NNBP=False, c=None, e_loop=0.0, T=298.2):
         calculated ([1,`nuz`]). If `nuz` is 1, calculate energy for first
         basepair.
     e_loop : float
-        free energy of the hairpin at the end of the unzipping region in
-        (kcal/mol).
+        Free energy for opening the terminal hairpin (kcal/mol).
     T : float
         Temperature in K
     """
@@ -1914,8 +1913,8 @@ def E_unzip_DNA(bases, nuz=0, NNBP=False, c=None, e_loop=0.0, T=298.2):
         return 0
 
     
-    # Include proper energy term for terminal hairpin, only if all bps are
-    # unzipped
+    # Include proper energy term for opening the terminal hairpin, only
+    # if all bps are unzipped
     if nuz == len(bases):
         e_loop = e_loop*kcal/Na
     else:
