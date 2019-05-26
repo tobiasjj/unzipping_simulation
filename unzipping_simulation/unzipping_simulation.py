@@ -69,10 +69,14 @@ def ext_ssDNA(F, nbs=0, S=None, L_p=None, z=None, T=298.2, avoid_neg_ext=True):
     Bockelmann, U., Essevaz-Roulet, B., Heslot, F. (1998). "DNA strand
     separation studied by single molecule force measurements". Physical Review
     E, 58(2), 2386-94.
+    
+    Steven B. Smith, Yujia Cui, Carlos Bustamante (1996). "Overstretching
+    B-DNA: The Elastic Response of Individual Double-Stranded and
+    Single-Stranded DNA Molecules". Science Reports, 271, 795-799
 
-    Contour length of ssDNA: L_SS = j*z
+    Contour length of ssDNA: L_0 = nbs*z
 
-    Kuhn length b (in FJC b = 2 * persistence length), in paper: b=1.5e-9
+    Kuhn length b (in FJC b = 2 * persistence length), in paper: b = 1.5 nm
 
     Parameters
     ----------
@@ -124,6 +128,7 @@ def ext_ssDNA(F, nbs=0, S=None, L_p=None, z=None, T=298.2, avoid_neg_ext=True):
         return 0
 
     b = 2*L_p
+    # modified FJC model incorporating Kuhn segments that can stretch
     # entropic (coth term) and stretching (F/S term) contribution
     x = nbs*z * (coth(F*b / (kB*T)) - kB*T / (F*b)) * (1 + F/S)
 
@@ -246,9 +251,6 @@ def F_dsDNA_wlc(x, nbp=0, pitch=None, L_p=None, T=298.2):
     """
     A worm-like chain model.
 
-    Marko, J.F.; Eric D. Siggia. "Stretching DNA". Macromolecules. 1995. 28:
-    8759–8770. doi:10.1021/ma00130a008
-
     Parameters
     ----------
     x : float
@@ -284,7 +286,14 @@ def F_dsDNA_wlc(x, nbp=0, pitch=None, L_p=None, T=298.2):
     if x >= L_0:
         return float('inf') * sign
 
-    F = kB * T / L_p * (1 / (4 * (1 - x / L_0)**2) - 1/4 + x / L_0)
+
+    #Marko, J.F.; Eric D. Siggia. "Stretching DNA". Macromolecules. 1995. 28:
+    #8759–8770. doi:10.1021/ma00130a008
+    # F = kB * T / L_p * (1 / (4 * (1 - x / L_0)**2) - 1/4 + x / L_0)
+
+    # Petrosyan, R. "Improved approximations for some polymer extension
+    # models". Rehol Acta. 2016. doi:10.1007/s00397-016-0977-9
+    F = kB * T / L_p * (1 / (4 * (1 - x / L_0)**2) - 1/4 + x / L_0 - 0.8 * (x / L_0)**2.15)
 
     return F * sign
 
@@ -1713,8 +1722,7 @@ _E_pair = {
     'GC': 2.36*kcal/Na,
     'TA': 0.84*kcal/Na,
 
-    # TODO: include proper energy term for hairpin
-    'L': -2.43*kcal/Na,  # ? Loop
+    # TODO: include proper energy term for the first and last bp
 
     # Ander PhD thesis 2011
     # kB*T = 4.1 pN*nm -> T ~ 298 K
@@ -1752,9 +1760,6 @@ _M_pair = {
     'CG': 0.132*kcal/Na,
     'GC': 0.079*kcal/Na,
     'TA': 0.091*kcal/Na,
-
-    # TODO: include proper energy term for hairpin
-    'L': 0*kcal/Na  # ? Loop
 }
 
 _DH_pair = {
@@ -1821,7 +1826,7 @@ def E_pair(bases, NNBP=False, c=None, T=None):
     c = 1 if c is None else c
     bases = bases.upper()
     if NNBP:
-        # TODO: include proper energy term for hairpin
+        # TODO: include proper energy term for the first and last bp
         e_pair = [_E_pair[''.join((a, b))]
                   for a, b
                   in zip(bases[:-1], bases[1:])]
@@ -1883,7 +1888,7 @@ def E_pair_T(bases, NNBP=False, c=None, T=298.2):
     return e
 
 
-def E_unzip_DNA(bases, nuz=0, NNBP=False, c=None, T=298.2):
+def E_unzip_DNA(bases, nuz=0, NNBP=False, c=None, e_loop=0.0, T=298.2):
     """
     Work necessary to separate two single strands of DNA double helix of `nuz`
     base pairs.
@@ -1899,23 +1904,25 @@ def E_unzip_DNA(bases, nuz=0, NNBP=False, c=None, T=298.2):
         Number of base(pair)s up to where the unpairing energy should be
         calculated ([1,`nuz`]). If `nuz` is 1, calculate energy for first
         basepair.
+    e_loop : float
+        free energy of the hairpin at the end of the unzipping region in
+        (kcal/mol).
     T : float
         Temperature in K
     """
     if nuz <= 0:
         return 0
 
-    if NNBP:
-        # TODO: include proper energy term for hairpin
-        # Last base is before the pT 10 hairpin, i.e. the last base is followed
-        # by a T
-        # if nuz == len(bases):
-        #     bases = bases + 'T'
-        # include also the base following the last unzipped base for NNBP
-        # calculation
-        nuz += 1
+    
+    # Include proper energy term for terminal hairpin, only if all bps are
+    # unzipped
+    if nuz != len(bases):
+        e_loop = 0.0
 
-    return np.sum(E_pair(bases[:nuz], NNBP=NNBP, c=c, T=T))
+    #if NNBP:
+        # TODO: include proper energy term for the first and last bp
+
+    return np.sum(E_pair(bases[:nuz], NNBP=NNBP, c=c, T=T)) + e_loop
 
 
 def _E_ext_ssDNA(x, nbs=0, S=None, L_p=None, z=None, T=298.2):
@@ -1996,8 +2003,13 @@ def E_ext_dsDNA_wlc(x, nbp=0, pitch=None, L_p=None, T=298.2):
 
     def integral(x):
         # from wolfram alpha
-        return (kB*T * (L_0**2 / (L_0 - x) + (2 * x**2) / L_0 - x)) / (4 * L_p)
+        #return (kB*T * (L_0**2 / (L_0 - x) + (2 * x**2) / L_0 - x)) / (4 * L_p)
+        #(k T (L^2/(L - x) + (2 x^2)/L - x))/(4 P) 
 
+        # Petrosyan, R. "Improved approximations for some polymer extension
+        # models". Rehol Acta. 2016. doi:10.1007/s00397-016-0977-9
+        return (kB*T * (L_0**2/ (L_0 - x) + (2 * x**2) / L_0 - 1.01587 * x * (x/L_0)**2.15 - x)) / (4 * L_p)
+        #(k T (L^2/(L - x) + (2 x^2)/L - 1.01587 x^1 (x/L)^2.15 - x))/(4 P)
     return integral(x) - integral(0)
 
 
@@ -2042,7 +2054,7 @@ def E_tot(bases='', nuz=0, nbs=0, x_ss=0.0, nbp=0, x_ds=0.0,
           d=0.0, kappa=0.0, d_angles=0.0, k_rot=0.0, radius=0.0,
           S=None, L_p_ssDNA=None, z=None,
           pitch=None, L_p_dsDNA=None,
-          NNBP=False, c=None, T=298.2, verbose=False):
+          NNBP=False, c=None, e_loop=0.0, T=298.2, verbose=False):
     """
     Parameters
     ----------
@@ -2065,7 +2077,7 @@ def E_tot(bases='', nuz=0, nbs=0, x_ss=0.0, nbp=0, x_ds=0.0,
     e_ext_ssDNA = E_ext_ssDNA(x_ss, nbs=nbs, z=z, L_p=L_p_ssDNA, S=S, T=T)
     e_ext_dsDNA = E_ext_dsDNA_wlc(x_ds, nbp=nbp, pitch=pitch, L_p=L_p_dsDNA,
                                   T=T)
-    e_unzip_DNA = E_unzip_DNA(bases, nuz=nuz, NNBP=NNBP, c=c, T=T)
+    e_unzip_DNA = E_unzip_DNA(bases, nuz=nuz, NNBP=NNBP, c=c, e_loop=e_loop, T=T)
     e_lev = np.sum(E_lev(d, kappa))
     e_rot = np.sum(E_rot(d_angles, k_rot, radius))
 
@@ -2091,7 +2103,7 @@ def equilibrium_xfe0(x0, bases='', nuz=0, nbs=0, nbp=0, nbs_loop=0,
                      r=0.0, z0=0.0, kappa=0.0,
                      S=None, L_p_ssDNA=None, z=None,
                      pitch=None, L_p_dsDNA=None,
-                     NNBP=False, c=None, T=298.2, verbose=False):
+                     NNBP=False, c=None, e_loop=0.0, T=298.2, verbose=False):
     """
     Calculate the equilibrium extension, force, and energy for a given stage
     displacement `x0` and a fixed set of the following parameters.
@@ -2138,7 +2150,7 @@ def equilibrium_xfe0(x0, bases='', nuz=0, nbs=0, nbp=0, nbs_loop=0,
                d=d2D, kappa=kappa,
                S=S, L_p_ssDNA=L_p_ssDNA, z=z,
                pitch=pitch, L_p_dsDNA=L_p_dsDNA,
-               NNBP=NNBP, c=c, T=T, verbose=verbose)
+               NNBP=NNBP, c=c, e_loop=e_loop, T=T, verbose=verbose)
 
     if verbose:
         template = "nuz: {:03d}, f0: {:.3e}, e0: {:.3e}"
@@ -2151,7 +2163,7 @@ def xfe0_all_nuz(x0, h0=0.0, bases='', nbs=0, nbp=0, nbs_loop=0,
                  radius=0.0, kappa=0.0,
                  S=None, L_p_ssDNA=None, z=None,
                  pitch=None, L_p_dsDNA=None,
-                 NNBP=False, c=0, T=298.2,
+                 NNBP=False, c=0, e_loop=0.0, T=298.2,
                  boltzmann_factor=1e-9, verbose=False):
     """
     Calculate the equilibrium extensions, forces and energies for a given stage
@@ -2199,7 +2211,7 @@ def xfe0_all_nuz(x0, h0=0.0, bases='', nbs=0, nbp=0, nbs_loop=0,
                              r=radius, z0=h0, kappa=kappa,
                              S=S, L_p_ssDNA=L_p_ssDNA, z=z,
                              pitch=pitch, L_p_dsDNA=L_p_dsDNA, NNBP=NNBP,
-                             c=c, T=T, verbose=verbose)
+                             c=c, e_loop=e_loop, T=T, verbose=verbose)
         X0_ss.append(x0_ss)
         X0_ds.append(x0_ds)
         D0.append(d2D)
@@ -2273,6 +2285,7 @@ def xfe0_all_nuz(x0, h0=0.0, bases='', nbs=0, nbp=0, nbs_loop=0,
             'L_p_dsDNA': L_p_dsDNA,
             'NNBP': NNBP,
             'c': c,
+            'e_loop': e_loop,
             'T': T,
             'boltzmann_factor': boltzmann_factor
         }
@@ -2311,9 +2324,9 @@ def approx_eq_nuz(x0, bases='', nbs=0, nbp=0,
         Return True, if unzipping construct has to be further unzipped, to
         reach equilibrium. Return False, if unziping construct has to be
         further annealed, to reach equilibrium. Ignore the opening of the
-        endloop (nbs_loop=0) for finding the minimum of the total energy, to
-        avoid falsly high numbers of unzipped basepairs, due to energy jump
-        upon opening of the end loop.
+        endloop (nbs_loop=0, e_loop=0.0) for finding the minimum of the total
+        energy, to avoid falsly high numbers of unzipped basepairs, due to
+        energy jump upon opening of the end loop.
         """
         nuzl = nuz
         nuzr = nuz + spacing
@@ -2323,13 +2336,13 @@ def approx_eq_nuz(x0, bases='', nbs=0, nbp=0,
                              nbs_loop=0, r=r, z0=z0, kappa=kappa,
                              S=S, L_p_ssDNA=L_p_ssDNA, z=z,
                              pitch=pitch, L_p_dsDNA=L_p_dsDNA,
-                             NNBP=NNBP, c=c, T=T, verbose=verbose)
+                             NNBP=NNBP, c=c, e_loop=0.0, T=T, verbose=verbose)
         _, _, _, f0r, e0r = \
             equilibrium_xfe0(x0, bases=bases, nuz=nuzr, nbs=nbs, nbp=nbp,
                              nbs_loop=0, r=r, z0=z0, kappa=kappa,
                              S=S, L_p_ssDNA=L_p_ssDNA, z=z,
                              pitch=pitch, L_p_dsDNA=L_p_dsDNA,
-                             NNBP=NNBP, c=c, T=T, verbose=verbose)
+                             NNBP=NNBP, c=c, e_loop=0.0, T=T, verbose=verbose)
         return e0l > e0r
 
     # Search for the approximate number of unzipped basepairs, to be in
@@ -2368,7 +2381,7 @@ def xfe0_fast_nuz(x0, h0=0.0, bases='', nuz_est=-1, nbs=0, nbp=0, nbs_loop=0,
                   radius=0.0, kappa=0.0,
                   S=None, L_p_ssDNA=None, z=None,
                   pitch=None, L_p_dsDNA=None,
-                  NNBP=False, c=0, T=298.2,
+                  NNBP=False, c=0, e_loop=0.0, T=298.2,
                   spacing=5, min_stepsize=10,
                   boltzmann_factor=1e-9, verbose=False):
     """
@@ -2443,7 +2456,7 @@ def xfe0_fast_nuz(x0, h0=0.0, bases='', nuz_est=-1, nbs=0, nbp=0, nbs_loop=0,
                              r=radius, z0=h0, kappa=kappa,
                              S=S, L_p_ssDNA=L_p_ssDNA, z=z,
                              pitch=pitch, L_p_dsDNA=L_p_dsDNA,
-                             NNBP=NNBP, c=c, T=T, verbose=verbose)
+                             NNBP=NNBP, c=c, e_loop=e_loop, T=T, verbose=verbose)
         NUZ0.append(nuz)
         X0_ss.append(x0_ss)
         X0_ds.append(x0_ds)
@@ -2564,6 +2577,7 @@ def xfe0_fast_nuz(x0, h0=0.0, bases='', nuz_est=-1, nbs=0, nbp=0, nbs_loop=0,
             'L_p_dsDNA': L_p_dsDNA,
             'NNBP': NNBP,
             'c': c,
+            'e_loop': e_loop,
             'T': T,
             'spacing': spacing,
             'min_stepsize': min_stepsize,
@@ -2591,7 +2605,7 @@ class _xfe0_fast_nuz_chained(object):
                  radius=0.0, kappa=0.0,
                  S=None, L_p_ssDNA=None, z=None,
                  pitch=None, L_p_dsDNA=None,
-                 NNBP=False, c=0, T=298.2,
+                 NNBP=False, c=0, e_loop=0.0, T=298.2,
                  spacing=5, min_stepsize=10,
                  boltzmann_factor=1e-9, verbose=False):
         if nuz_est == -1:
@@ -2602,7 +2616,7 @@ class _xfe0_fast_nuz_chained(object):
                           radius=radius, kappa=kappa,
                           S=S, L_p_ssDNA=L_p_ssDNA, z=z,
                           pitch=pitch, L_p_dsDNA=L_p_dsDNA,
-                          NNBP=NNBP, c=c, T=T,
+                          NNBP=NNBP, c=c, e_loop=e_loop, T=T,
                           boltzmann_factor=boltzmann_factor, verbose=verbose)
         self.nuz_est = int(round(r['NUZ0_avg']))
         return r
@@ -2613,7 +2627,7 @@ def unzipping_force_energy(x0_min, x0_max, h0=0.0, resolution=1e-9, processes=8,
                            radius=0.0, kappa=0.0,
                            S=None, L_p_ssDNA=None, z=None,
                            pitch=None, L_p_dsDNA=None,
-                           NNBP=False, c=0, T=298.2,
+                           NNBP=False, c=0, e_loop=0.0, T=298.2,
                            spacing=5, min_stepsize=10,
                            boltzmann_factor=1e-9,
                            individual_points=False, verbose=False,
@@ -2660,7 +2674,7 @@ def unzipping_force_energy(x0_min, x0_max, h0=0.0, resolution=1e-9, processes=8,
                              radius=radius, kappa=kappa,
                              S=S, L_p_ssDNA=L_p_ssDNA, z=z,
                              pitch=pitch, L_p_dsDNA=L_p_dsDNA,
-                             NNBP=NNBP, c=c, T=T,
+                             NNBP=NNBP, c=c, e_loop=e_loop, T=T,
                              spacing=spacing, min_stepsize=min_stepsize,
                              boltzmann_factor=boltzmann_factor)
         # nuz_est = int(round(r['NUZ0_avg']))
@@ -2699,6 +2713,7 @@ def unzipping_force_energy(x0_min, x0_max, h0=0.0, resolution=1e-9, processes=8,
             'L_p_dsDNA': L_p_dsDNA,
             'NNBP': NNBP,
             'c': c,
+            'e_loop': e_loop,
             'T': T,
             'spacing': spacing,
             'min_stepsize': min_stepsize,
@@ -2715,7 +2730,7 @@ def plot_unzip_energy(x0, h0=0.0, bases='', nuz_est=-1, nbs=0, nbp=0, nbs_loop=0
                       radius=0.0, kappa=0.0,
                       S=None, L_p_ssDNA=None, z=None,
                       pitch=None, L_p_dsDNA=None,
-                      NNBP=False, c=0, T=298.2,
+                      NNBP=False, c=0, e_loop=0.0, T=298.2,
                       spacing=5, min_stepsize=10,
                       boltzmann_factor=1e-9,
                       verbose=False, compatibility=False,
@@ -2727,7 +2742,7 @@ def plot_unzip_energy(x0, h0=0.0, bases='', nuz_est=-1, nbs=0, nbp=0, nbs_loop=0
                             radius=radius, kappa=kappa,
                             S=S, L_p_ssDNA=L_p_ssDNA, z=z,
                             pitch=pitch, L_p_dsDNA=L_p_dsDNA,
-                            NNBP=NNBP, c=c, T=T,
+                            NNBP=NNBP, c=c, e_loop=e_loop, T=T,
                             boltzmann_factor=boltzmann_factor,
                             verbose=verbose)
     else:
@@ -2736,7 +2751,7 @@ def plot_unzip_energy(x0, h0=0.0, bases='', nuz_est=-1, nbs=0, nbp=0, nbs_loop=0
                              radius=radius, kappa=kappa,
                              S=S, L_p_ssDNA=L_p_ssDNA, z=z,
                              pitch=pitch, L_p_dsDNA=L_p_dsDNA,
-                             NNBP=NNBP, c=c, T=T,
+                             NNBP=NNBP, c=c, e_loop=e_loop, T=T,
                              spacing=spacing, min_stepsize=min_stepsize,
                              boltzmann_factor=boltzmann_factor,
                              verbose=verbose)
@@ -2786,7 +2801,7 @@ def equilibrium_xfe0_rot(A0, bases='', nuz=0, nbs=0, nbp=0, nbs_loop=0,
                          r0_sph=None, kappa=None, k_rot=None,
                          S=None, L_p_ssDNA=None, z=None,
                          pitch=None, L_p_dsDNA=None,
-                         NNBP=False, c=None, T=298.2, verbose=False):
+                         NNBP=False, c=None, e_loop=0.0, T=298.2, verbose=False):
     """
     Calculate the equilibrium extension, force, and energy for a given stage
     displacement `x0` and a fixed set of the following parameters.
@@ -2849,7 +2864,7 @@ def equilibrium_xfe0_rot(A0, bases='', nuz=0, nbs=0, nbp=0, nbs_loop=0,
                d=d, kappa=kappa, d_angles=d_angles, k_rot=k_rot, radius=radius,
                S=S, L_p_ssDNA=L_p_ssDNA, z=z,
                pitch=pitch, L_p_dsDNA=L_p_dsDNA,
-               NNBP=NNBP, c=c, T=T, verbose=verbose)
+               NNBP=NNBP, c=c, e_loop=e_loop, T=T, verbose=verbose)
 
     if verbose:
         template = "nuz: {:03d}, f0: {:.3e}, e0: {:.3e}"
@@ -2889,9 +2904,9 @@ def approx_eq_nuz_rot(A0, bases='', nbs=0, nbp=0,
         Return True, if unzipping construct has to be further unzipped, to
         reach equilibrium. Return False, if unziping construct has to be
         further annealed, to reach equilibrium. Ignore the opening of the
-        endloop (nbs_loop=0) for finding the minimum of the total energy, to
-        avoid falsly high numbers of unzipped basepairs, due to energy jump
-        upon opening of the end loop.
+        endloop (nbs_loop=0, e_loop=0.0) for finding the minimum of the total
+        energy, to avoid falsly high numbers of unzipped basepairs, due to
+        energy jump upon opening of the end loop.
         """
         nuzl = nuz
         nuzr = nuz + spacing
@@ -2902,14 +2917,14 @@ def approx_eq_nuz_rot(A0, bases='', nbs=0, nbp=0,
                                  r0_sph=r0_sph, kappa=kappa, k_rot=k_rot,
                                  S=S, L_p_ssDNA=L_p_ssDNA, z=z,
                                  pitch=pitch, L_p_dsDNA=L_p_dsDNA,
-                                 NNBP=NNBP, c=c, T=T, verbose=verbose)
+                                 NNBP=NNBP, c=c, e_loop=0.0, T=T, verbose=verbose)
         _, _, _, _, _, f0r, e0r = \
             equilibrium_xfe0_rot(A0, bases=bases, nuz=nuzr, nbs=nbs, nbp=nbp,
                                  nbs_loop=0,
                                  r0_sph=r0_sph, kappa=kappa, k_rot=k_rot,
                                  S=S, L_p_ssDNA=L_p_ssDNA, z=z,
                                  pitch=pitch, L_p_dsDNA=L_p_dsDNA,
-                                 NNBP=NNBP, c=c, T=T, verbose=verbose)
+                                 NNBP=NNBP, c=c, e_loop=0.0, T=T, verbose=verbose)
         return e0l > e0r
 
     # Search for the approximate number of unzipped basepairs, to be in
@@ -2948,7 +2963,7 @@ def xfe0_fast_nuz_rot(A0, bases='', nuz_est=-1, nbs=0, nbp=0, nbs_loop=0,
                       r0_sph=None, kappa=None, k_rot=None,
                       S=None, L_p_ssDNA=None, z=None,
                       pitch=None, L_p_dsDNA=None,
-                      NNBP=False, c=0, T=298.2,
+                      NNBP=False, c=0, e_loop=0.0, T=298.2,
                       spacing=5, min_stepsize=10,
                       boltzmann_factor=1e-9, verbose=False):
     """
@@ -2991,7 +3006,7 @@ def xfe0_fast_nuz_rot(A0, bases='', nuz_est=-1, nbs=0, nbp=0, nbs_loop=0,
                                     r0_sph=r0_sph, kappa=kappa, k_rot=k_rot,
                                     S=S, L_p_ssDNA=L_p_ssDNA, z=z,
                                     pitch=pitch, L_p_dsDNA=L_p_dsDNA,
-                                    NNBP=NNBP, c=c, T=T,
+                                    NNBP=NNBP, c=c, e_loop=e_loop, T=T,
                                     spacing=spacing, min_stepsize=min_stepsize,
                                     verbose=verbose)
     else:
@@ -3025,7 +3040,7 @@ def xfe0_fast_nuz_rot(A0, bases='', nuz_est=-1, nbs=0, nbp=0, nbs_loop=0,
                                  r0_sph=r0_sph, kappa=kappa, k_rot=k_rot,
                                  S=S, L_p_ssDNA=L_p_ssDNA, z=z,
                                  pitch=pitch, L_p_dsDNA=L_p_dsDNA,
-                                 NNBP=NNBP, c=c, T=T, verbose=verbose)
+                                 NNBP=NNBP, c=c, e_loop=e_loop, T=T, verbose=verbose)
         NUZ0.append(nuz)
         X0_ss.append(x0_ss)
         X0_ds.append(x0_ds)
@@ -3158,6 +3173,7 @@ def xfe0_fast_nuz_rot(A0, bases='', nuz_est=-1, nbs=0, nbp=0, nbs_loop=0,
             'L_p_dsDNA': L_p_dsDNA,
             'NNBP': NNBP,
             'c': c,
+            'e_loop': e_loop,
             'T': T,
             'spacing': spacing,
             'min_stepsize': min_stepsize,
@@ -3185,7 +3201,7 @@ class _xfe0_fast_nuz_rot_chained(object):
                  r0_sph=None, kappa=None, k_rot=None,
                  S=None, L_p_ssDNA=None, z=None,
                  pitch=None, L_p_dsDNA=None,
-                 NNBP=False, c=0, T=298.2,
+                 NNBP=False, c=0, e_loop=0.0, T=298.2,
                  spacing=5, min_stepsize=10,
                  boltzmann_factor=1e-9, verbose=False):
         if nuz_est == -1:
@@ -3196,7 +3212,7 @@ class _xfe0_fast_nuz_rot_chained(object):
                               r0_sph=r0_sph, kappa=kappa, k_rot=k_rot,
                               S=S, L_p_ssDNA=L_p_ssDNA, z=z,
                               pitch=pitch, L_p_dsDNA=L_p_dsDNA,
-                              NNBP=NNBP, c=c, T=T,
+                              NNBP=NNBP, c=c, e_loop=e_loop, T=T,
                               boltzmann_factor=boltzmann_factor,
                               verbose=verbose)
         self.nuz_est = int(round(r['NUZ0_avg']))
@@ -3210,7 +3226,7 @@ def unzipping_force_energy_rot(x0_min, x0_max, y0=0.0, h0=0.0, resolution=1e-9,
                                k_rot=None,
                                S=None, L_p_ssDNA=None, z=None,
                                pitch=None, L_p_dsDNA=None,
-                               NNBP=False, c=0, T=298.2,
+                               NNBP=False, c=0, e_loop=0.0, T=298.2,
                                spacing=5, min_stepsize=10,
                                boltzmann_factor=1e-9,
                                individual_points=False, verbose=False,
@@ -3264,7 +3280,7 @@ def unzipping_force_energy_rot(x0_min, x0_max, y0=0.0, h0=0.0, resolution=1e-9,
                                  r0_sph=r0_sph, kappa=kappa, k_rot=k_rot,
                                  S=S, L_p_ssDNA=L_p_ssDNA, z=z,
                                  pitch=pitch, L_p_dsDNA=L_p_dsDNA,
-                                 NNBP=NNBP, c=c, T=T,
+                                 NNBP=NNBP, c=c, e_loop=e_loop, T=T,
                                  spacing=spacing, min_stepsize=min_stepsize,
                                  boltzmann_factor=boltzmann_factor)
         # nuz_est = int(round(r['NUZ0_avg']))
@@ -3306,6 +3322,7 @@ def unzipping_force_energy_rot(x0_min, x0_max, y0=0.0, h0=0.0, resolution=1e-9,
             'L_p_dsDNA': L_p_dsDNA,
             'NNBP': NNBP,
             'c': c,
+            'e_loop': e_loop,
             'T': T,
             'spacing': spacing,
             'min_stepsize': min_stepsize,
@@ -3376,6 +3393,7 @@ def simulate_unzipping(simulation_settings, processes=8):
     kappa = simulation['settings']['kappa']
     k_rot = simulation['settings']['k_rot']
     c = simulation['settings']['c']
+    e_loop = simulation['settings']['e_loop']
     T = simulation['settings']['T']
 
     # Set parameters for the simulation
@@ -3395,7 +3413,7 @@ def simulate_unzipping(simulation_settings, processes=8):
                                            radius=radius, kappa=kappa,
                                            S=S, L_p_ssDNA=L_p_ssDNA, z=z,
                                            pitch=pitch, L_p_dsDNA=L_p_dsDNA,
-                                           NNBP=NNBP, c=c, T=T,
+                                           NNBP=NNBP, c=c, e_loop=e_loop, T=T,
                                            boltzmann_factor=boltzmann_factor,
                                            individual_points=True)
     else:
@@ -3405,7 +3423,7 @@ def simulate_unzipping(simulation_settings, processes=8):
                                                radius=radius, angles_r0=angles_r0, kappa=kappa, k_rot=k_rot,
                                                S=S, L_p_ssDNA=L_p_ssDNA, z=z,
                                                pitch=pitch, L_p_dsDNA=L_p_dsDNA,
-                                               NNBP=NNBP, c=c, T=T,
+                                               NNBP=NNBP, c=c, e_loop=e_loop, T=T,
                                                boltzmann_factor=boltzmann_factor,
                                                individual_points=True)
 
@@ -3420,7 +3438,7 @@ def plot_unzip_energy_rot(x0, y0=0.0, h0=0.0, bases='', nuz_est=-1, nbs=0,
                           radius=0.0, angles_r0=None, kappa=None, k_rot=None,
                           S=None, L_p_ssDNA=None, z=None,
                           pitch=None, L_p_dsDNA=None,
-                          NNBP=False, c=0, T=298.2,
+                          NNBP=False, c=0, e_loop=0.0, T=298.2,
                           spacing=5, min_stepsize=10,
                           boltzmann_factor=1e-9,
                           verbose=False, axes=None):
@@ -3434,7 +3452,7 @@ def plot_unzip_energy_rot(x0, y0=0.0, h0=0.0, bases='', nuz_est=-1, nbs=0,
                              r0_sph=r0_sph, kappa=kappa, k_rot=k_rot,
                              S=S, L_p_ssDNA=L_p_ssDNA, z=z,
                              pitch=pitch, L_p_dsDNA=L_p_dsDNA,
-                             NNBP=NNBP, c=c, T=T,
+                             NNBP=NNBP, c=c, e_loop=e_loop, T=T,
                              spacing=spacing, min_stepsize=min_stepsize,
                              boltzmann_factor=boltzmann_factor,
                              verbose=verbose)
@@ -3617,14 +3635,14 @@ def get_key(x0_min, x0_max, y0, h0, resolution,
             radius, angles_r0, kappa, k_rot,
             S, L_p_ssDNA, z,
             pitch, L_p_dsDNA,
-            NNBP, c, T, boltzmann_factor):
+            NNBP, c, e_loop, T, boltzmann_factor):
     hasher = hashlib.md5()
     for c in [x0_min, x0_max, y0, h0, resolution,
               bases.capitalize(), nbs, nbp, nbs_loop,
               radius,
               S, L_p_ssDNA, z,
               pitch, L_p_dsDNA,
-              NNBP, c, T, boltzmann_factor]:
+              NNBP, c, e_loop, T, boltzmann_factor]:
         hasher.update(bytes(str(c), 'ASCII'))
     if angles_r0 is not None:
         hasher.update(angles_r0)
