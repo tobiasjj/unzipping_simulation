@@ -281,6 +281,7 @@ def F_dsDNA_wlc(x, nbp=0, pitch=None, L_p=None, T=298.2):
         x = -x
         sign = -1
 
+    # Contour length
     L_0 = nbp*pitch
 
     if x >= L_0:
@@ -290,10 +291,12 @@ def F_dsDNA_wlc(x, nbp=0, pitch=None, L_p=None, T=298.2):
     # 8759–8770. doi:10.1021/ma00130a008
     # F = kB * T / L_p * (1 / (4 * (1 - x / L_0)**2) - 1/4 + x / L_0)
 
+    # Relative extension
+    x = x / L_0
+    
     # Petrosyan, R. "Improved approximations for some polymer extension
     # models". Rehol Acta. 2016. doi:10.1007/s00397-016-0977-9
-    F = kB * T / L_p * (1 / (4 * (1 - x / L_0)**2) - 1/4 + x / L_0 - 0.8 *
-                        (x / L_0)**2.15)
+    F = kB * T / L_p * (1 / (4 * (1 - x)**2) - 1/4 + x - 0.8 * x**2.15)
 
     return F * sign
 
@@ -2076,8 +2079,8 @@ def E_tot(bases='', nuz=0, nbs=0, x_ss=0.0, nbp=0, x_ds=0.0,
     e_rot = np.sum(E_rot(d_angles, k_rot, radius))
 
     # Include proper energy term for opening the terminal hairpin, only if all
-    # bps are unzipped
-    if nuz == len(bases):
+    # bps are already unzipped and hairpin is to be opened
+    if nuz >= len(bases) + 1:
         e_loop = e_loop*kcal/Na
     else:
         e_loop = 0.0
@@ -2128,10 +2131,9 @@ def equilibrium_xfe0(x0, bases='', nuz=0, nbs=0, nbp=0, nbs_loop=0,
     # One unzipped basepair leads to 2 free ssDNA bases
     nbs = 2*nuz + nbs
 
-    # If unzipping fork reaches the last basepair, end loop of
-    # unzipping construct unzips and elongates the ssDNA by
-    # nbs_loop bases
-    if nbs_loop > 0 and nuz >= len(bases):
+    # If unzipping fork has reached the last basepair and end loop of unzipping
+    # construct should be unzipped, elongates the ssDNA by nbs_loop bases
+    if nbs_loop > 0 and nuz >= len(bases) + 1:
         nbs += nbs_loop
 
     # Calculate most probable force for
@@ -2186,7 +2188,13 @@ def xfe0_all_nuz(x0, h0=0.0, bases='', nbs=0, nbp=0, nbs_loop=0,
     kappa : float
         Stiffness of lever (handle) attached to DNA in N/m
     """
+    # Maximum number of unzippabed bps
     nuz_max = len(bases)
+    
+    # If hairpin exists, add one possible unzipping event representative for
+    # opening the hairpin
+    if nbs_loop > 0:
+        nuz_max += 1
 
     # Create a list of all possible numbers of unzipped basepairs
     NUZ0 = np.arange(0, nuz_max+1)
@@ -2415,7 +2423,13 @@ def xfe0_fast_nuz(x0, h0=0.0, bases='', nuz_est=-1, nbs=0, nbp=0, nbs_loop=0,
         result is. The larger the boltzmann factor is, the faster the
         calculation.
     """
+    # Maximum number of unzippabed bps
     nuz_max = len(bases)
+    
+    # If hairpin exists, add one possible unzipping event representative for
+    # opening the hairpin
+    if nbs_loop > 0:
+        nuz_max += 1
 
     if boltzmann_factor <= 0:
         # All nuz will be calculated, start in the middle
@@ -2670,8 +2684,6 @@ def unzipping_force_energy(x0_min, x0_max, h0=0.0, resolution=1e-9, processes=8,
     def f(x0):
         print('\rCalculating equilibrium for stage displacement x0 = {:.3e}'
               '...'.format(x0), end='', flush=True)
-        # return xfe0_fast_nuz(x0, bases=bases, nuz_est=nuz_est, nbs=nbs,
-        #                      nbp=nbp, nbs_loop=nbs_loop, kappa=kappa,
         return xfe0_fast_nuz(x0=x0, h0=h0, bases=bases, nbs=nbs, nbp=nbp,
                              nbs_loop=nbs_loop,
                              radius=radius, kappa=kappa,
@@ -2834,10 +2846,9 @@ def equilibrium_xfe0_rot(A0, bases='', nuz=0, nbs=0, nbp=0, nbs_loop=0,
     # One unzipped basepair leads to 2 free ssDNA bases
     nbs = 2*nuz + nbs
 
-    # If unzipping fork reaches the last basepair, end loop of
-    # unzipping construct unzips and elongates the ssDNA by
-    # nbs_loop bases
-    if nbs_loop > 0 and nuz >= len(bases):
+    # If unzipping fork has reached the last basepair and end loop of unzipping
+    # construct should be unzipped, elongates the ssDNA by nbs_loop bases
+    if nbs_loop > 0 and nuz >= len(bases) + 1:
         nbs += nbs_loop
 
     # Calculate most probable force for
