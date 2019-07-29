@@ -293,7 +293,7 @@ def F_dsDNA_wlc(x, nbp=0, pitch=None, L_p=None, T=298.2):
 
     # Relative extension
     x = x / L_0
-    
+
     # Petrosyan, R. "Improved approximations for some polymer extension
     # models". Rehol Acta. 2016. doi:10.1007/s00397-016-0977-9
     F = kB * T / L_p * (1 / (4 * (1 - x)**2) - 1/4 + x - 0.8 * x**2.15)
@@ -2190,7 +2190,7 @@ def xfe0_all_nuz(x0, h0=0.0, bases='', nbs=0, nbp=0, nbs_loop=0,
     """
     # Maximum number of unzippabed bps
     nuz_max = len(bases)
-    
+
     # If hairpin exists, add one possible unzipping event representative for
     # opening the hairpin
     if nbs_loop > 0:
@@ -2425,7 +2425,7 @@ def xfe0_fast_nuz(x0, h0=0.0, bases='', nuz_est=-1, nbs=0, nbp=0, nbs_loop=0,
     """
     # Maximum number of unzippabed bps
     nuz_max = len(bases)
-    
+
     # If hairpin exists, add one possible unzipping event representative for
     # opening the hairpin
     if nbs_loop > 0:
@@ -3619,9 +3619,9 @@ def plot_simulated_force_extension(simulation, x=None, y=None, yXYZ=None,
 
     ax.grid(True)
 
-    ax.set_xlabel('(Apparent) extension of the construct (nm)')
+    ax.set_xlabel('(Apparent) ext of construct (nm)')
     ax.set_ylabel('Force (pN)')
-    ax2.set_ylabel('Number of unzipped basepairs')
+    ax2.set_ylabel('# unzip bps')
 
     ylim = ylim or (-1, 18)
     ax.set_ylim(ylim)
@@ -3643,9 +3643,9 @@ def plot_simulated_force_extension(simulation, x=None, y=None, yXYZ=None,
 
     ax.grid(True)
 
-    ax.set_xlabel('(Apparent) extension of the construct (nm)')
+    ax.set_xlabel('(Apparent) ext of construct (nm)')
     ax.set_ylabel('Force (pN)')
-    ax2.set_ylabel('Angle theta difference (°)')
+    ax2.set_ylabel(r'$\theta$ diff (°)')
 
     ax.set_ylim(ylim)
     return fig, axes
