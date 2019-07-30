@@ -3612,7 +3612,7 @@ def plot_simulated_force_extension(simulation, x=None, y=None, yXYZ=None,
 
     # Plot measured unzipping curve
     if x is not None and y is not None:
-        ax.plot(x, y)
+        ax.plot(x * 1e9, y * 1e12)
 
     # Plot number of simulated unzipped basepairs
     ax2.plot(EXT_APP_avg[idx_valid]*1e9, NUZ0_avg[idx_valid], color='cyan')
@@ -3635,7 +3635,7 @@ def plot_simulated_force_extension(simulation, x=None, y=None, yXYZ=None,
 
     # Plot measured unzipping curves
     if x is not None and yXYZ is not None:
-        ax.plot(x, np.abs(yXYZ))
+        ax.plot(x * 1e9, np.abs(yXYZ) * 1e12)
 
     # Plot plot differenc of angle r0 and r
     ax2.plot(EXT_APP_avg[idx_valid]*1e9, THETA_DIFF[idx_valid]*180/math.pi,
