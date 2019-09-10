@@ -1,7 +1,7 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 #
-# unzipping_simulation, simulate the force extension of unzipipng DNA
+# Unzipping Simulation, simulate the unzipping of DNA double strands
 # Copyright 2018 Tobias Jachowski
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
