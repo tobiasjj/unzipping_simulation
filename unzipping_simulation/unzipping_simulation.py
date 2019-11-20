@@ -85,13 +85,13 @@ def ext_ssDNA(F, nbs=0, S=None, L_p=None, z=None, T=298.2, avoid_neg_ext=True):
     F : float
         Force in N
     S : float
-        Stretch modulus in N
+        Stretch modulus in N. Defaults to 800e-12 m.
     L_p : float
-        Persistence length in m
+        Persistence length in m. Defaults to 0.797e-9 m.
     z : float
-        Length of a single base in m
+        Length of a single base in m. Defaults to 0.537e-9 m.
     T : float
-        Temperature in K
+        Temperature in K.
 
     Returns
     -------
