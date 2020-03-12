@@ -25,6 +25,7 @@ import hashlib
 import math
 import mpmath
 import numpy as np
+import os
 import pickle
 import time
 import warnings
@@ -3368,7 +3369,7 @@ def get_unzipping_simulation(simulation_settings_file, simulations_dir=None,
     simulation_file = simulation_file or ''.join((hash_key, '.p'))
     simulation_file = os.path.join(simulations_dir, simulation_file)
 
-    # Load/do the simulation
+    # Load or do the simulation
     try:
         with open(simulation_file, 'rb') as f:
             simulation = pickle.load(f)
@@ -3379,11 +3380,11 @@ def get_unzipping_simulation(simulation_settings_file, simulations_dir=None,
 
     # Save the simulation
     if save:
-        try:
-            directory = os.path.dirname(simulation_file)
-            os.makedirs(directory, exist_ok=True)
-            with open(simulation_file, 'wb') as f:
-                pickle.dump(simulation, f)
+        directory = os.path.dirname(simulation_file)
+        os.makedirs(directory, exist_ok=True)
+        with open(simulation_file, 'wb') as f:
+            pickle.dump(simulation, f)
+
     return simulation
 
 
