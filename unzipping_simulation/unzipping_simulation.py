@@ -3357,36 +3357,134 @@ def simulation_settings(simulation_file, **kwargs):
     return {'settings': simulation['settings']}
 
 
-def get_unzipping_simulation(simulation_settings_file, simulations_file=None,
-                             save=True, **kwargs):
-    simulations_file = simulations_file or 'simulations.p'
+def get_unzipping_simulation(simulation_settings_file, simulations_dir=None,
+                             simulation_file=None, save=True, **kwargs):
     # Get simulation settings
     simulation = simulation_settings(simulation_settings_file, **kwargs)
     hash_key = get_key(**simulation['settings'])
+
+    # Get path of simulation
+    simulations_dir = '.' if simulations_dir is None else simulations_dir
+    simulation_file = simulation_file or ''.join((hash_key, '.p'))
+    simulation_file = os.path.join(simulations_dir, simulation_file)
+
+    # Load/do the simulation
     try:
-        with open(simulations_file, 'rb') as f:
-            simulations = pickle.load(f)
+        with open(simulation_file, 'rb') as f:
+            simulation = pickle.load(f)
+        return simulation
     except FileNotFoundError:
-        simulations = {}
-    if hash_key in simulations:
-        return simulations[hash_key]
-    else:
         # Do the simulation
         simulation = simulate_unzipping(simulation)
+
     # Save the simulation
     if save:
         try:
-            with open(simulations_file, 'rb+') as f:
-                simulations = pickle.load(f)
-                f.seek(0)
-                simulations[hash_key] = copy.deepcopy(simulation)
-                pickle.dump(simulations, f)
-        except FileNotFoundError:
-            with open(simulations_file, 'wb') as f:
-                simulations = {}
-                simulations[hash_key] = copy.deepcopy(simulation)
-                pickle.dump(simulations, f)
+            directory = os.path.dirname(simulation_file)
+            os.makedirs(directory, exist_ok=True)
+            with open(simulation_file, 'wb') as f:
+                pickle.dump(simulation, f)
     return simulation
+
+
+"""
+def get_simulation_results(simulation):
+    # Get the unzipping construct parameters
+    bases = simulation['settings']['bases']
+    nbs = simulation['settings']['nbs']
+    nbp = simulation['settings']['nbp']
+    nbs_loop = simulation['settings']['nbs_loop']
+    S = simulation['settings']['S']
+    L_p_ssDNA = simulation['settings']['L_p_ssDNA']
+    z = simulation['settings']['z']
+    pitch = simulation['settings']['pitch']
+    L_p_dsDNA = simulation['settings']['L_p_dsDNA']
+
+    # Get other experimental parameters
+    radius = simulation['settings']['radius']
+    angles_r0 = simulation['settings']['angles_r0']
+    kappa = simulation['settings']['kappa']
+    k_rot = simulation['settings']['k_rot']
+    c = simulation['settings']['c']
+    T = simulation['settings']['T']
+
+    # Get parameters of the simulation
+    NNBP = simulation['settings']['NNBP']
+    x0_min = simulation['settings']['x0_min']
+    x0_max = simulation['settings']['x0_max']
+    h0 = simulation['settings']['h0']
+    y0 = simulation['settings']['y0']
+    resolution = simulation['settings']['resolution']
+    boltzmann_factor = simulation['settings']['boltzmann_factor']
+
+    # Get variables of simulated data
+    XFE, XFE0 = simulation['XFE'], simulation['XFE0']
+
+    # extension, number of unzipped basepairs, force
+    # extension of the construct
+    X = XFE['X']
+    # 3D position of the stage
+    X0 = XFE['A0'][:,0]
+    # average number of unzipped basepairs
+    NUZ0_avg = XFE['NUZ0_avg']
+    # most probable number of unzipped basepairs
+    NUZ0_max = XFE['NUZ0_max_W0']
+
+    # Average force acting on the construct
+    F0_avg = XFE['F0_avg']
+    # Most probable force acting on the construct
+    F0_max = XFE['F0_max_W0']
+"""
+
+
+def get_force_extension_nuz(simulation, theta=False):
+    """
+    Get extension, force, and number of unzipped basepairs of a simulation.
+    """
+    # Set variables of simulated data
+    XFE, XFE0 = simulation['XFE'], simulation['XFE0']
+    kappa = simulation['settings']['kappa']
+    k_rot = simulation['settings']['k_rot']
+
+    # Get extension, force, and number of unzipped basepairs ...
+    # Extension of the construct
+    X = XFE['X']
+
+    # Apparent extension (taking into consideration rotation of bead)
+    try:
+        EXT_APP_avg = XFE['EXT_APP_avg']
+    except KeyError:
+        # Fallback to extension of the construct
+        EXT_APP_avg = X
+
+    # Average force acting on the microsphere
+    F0XYZ_avg = np.array([xfe0['D0_avg'] * kappa for xfe0 in XFE0])
+    F0d_avg = np.sqrt(np.sum(np.power(F0XYZ_avg, 2), axis=1))
+    # should be the same as:
+    # F0d_avg = np.array([(np.sqrt(((xfe0['D0'] * kappa)**2).sum(axis=1))
+    #                * xfe0['W0'] / xfe0['W0'].sum()).sum() for xfe0 in XFE0])
+
+    # Average number of unzipped basepairs
+    NUZ0_avg = XFE['NUZ0_avg']
+
+    # Select data which was properly fitted
+    try:
+        THETA_DIFF = XFE['DA0_avg'][:,0]
+    except KeyError:
+        THETA_DIFF = np.zeros_like(X)
+
+    if k_rot is None or np.all(k_rot == 0):
+        idx_valid = (X != 0)
+    else:
+        idx_valid = np.logical_and(abs(THETA_DIFF) > 0*math.pi/180,
+                                   abs(THETA_DIFF) < 45*math.pi/180)
+
+    if theta:
+        return (EXT_APP_avg[idx_valid], F0d_avg[idx_valid],
+                F0XYZ_avg[idx_valid], NUZ0_avg[idx_valid],
+                THETA_DIFF[idx_valid])
+    return (EXT_APP_avg[idx_valid], F0d_avg[idx_valid], F0XYZ_avg[idx_valid],
+            NUZ0_avg[idx_valid])
 
 
 def simulate_unzipping(simulation_settings, processes=8):
@@ -3524,78 +3622,12 @@ def plot_unzip_energy_rot(x0, y0=0.0, h0=0.0, bases='', nuz_est=-1, nbs=0,
 
 
 def plot_simulated_force_extension(simulation, x=None, y=None, yXYZ=None,
-                                   axes=None, ylim=None):
-    # Set the unzipping construct parameters
-    #bases = simulation['settings']['bases']
-    #nbs = simulation['settings']['nbs']
-    #nbp = simulation['settings']['nbp']
-    #nbs_loop = simulation['settings']['nbs_loop']
-    #S = simulation['settings']['S']
-    #L_p_ssDNA = simulation['settings']['L_p_ssDNA']
-    #z = simulation['settings']['z']
-    #pitch = simulation['settings']['pitch']
-    #L_p_dsDNA = simulation['settings']['L_p_dsDNA']
-
-    # Set other experimental parameters
-    #radius = simulation['settings']['radius']
-    #angles_r0 = simulation['settings']['angles_r0']
-    kappa = simulation['settings']['kappa']
-    k_rot = simulation['settings']['k_rot']
-    #c = simulation['settings']['c']
-    #T = simulation['settings']['T']
-
-    # Set parameters for the simulation
-    #NNBP = simulation['settings']['NNBP']
-    #x0_min = simulation['settings']['x0_min']
-    #x0_max = simulation['settings']['x0_max']
-    #h0 = simulation['settings']['h0']
-    #y0 = simulation['settings']['y0']
-    #resolution = simulation['settings']['resolution']
-    #boltzmann_factor = simulation['settings']['boltzmann_factor']
-
-    # Set variables of simulated data
-    XFE, XFE0 = simulation['XFE'], simulation['XFE0']
-
-    # Assign variables to be plotted
-    # extension, number of unzipped basepairs, force
-    # extension of the construct
-    X = XFE['X']
-    # 3D position of the stage
-    # X0 = XFE['A0'][:,0]
-    # average number of unzipped basepairs
-    NUZ0_avg = XFE['NUZ0_avg']
-    # most probable number of unzipped basepairs
-    # NUZ0_max = XFE['NUZ0_max_W0']
-    # Apparent extension (taking into consideration rotation of bead)
-    try:
-        EXT_APP_avg = XFE['EXT_APP_avg']
-    except KeyError:
-        # Fallback to extension of the construct
-        EXT_APP_avg = X
-
-    # Average force acting on the construct
-    # F0_avg = XFE['F0_avg']
-    # Most probable force acting on the construct
-    # F0_max = XFE['F0_max_W0']
-    # Average force acting on the bead
-    F0d_avg = np.array([np.sqrt(((xfe0['D0_avg'] * kappa)**2).sum()) for xfe0
-                        in XFE0])
-    # should be the same as:
-    # F0d_avg = np.array([(np.sqrt(((xfe0['D0'] * kappa)**2).sum(axis=1)) * xfe0['W0'] / xfe0['W0'].sum()).sum() for xfe0 in XFE0])
-    F0XYZ_avg = np.array([np.sqrt(((xfe0['D0_avg'] * kappa)**2)) for xfe0
-                          in XFE0])
-    # Bead rotation in difference of angles of vectors r0 and r of the bead
-    try:
-        THETA_DIFF = XFE['DA0_avg'][:,0]
-    except KeyError:
-        THETA_DIFF = np.zeros_like(X)
-
-    # Select data which was properly fitted
-    if k_rot is None or np.all(k_rot == 0):
-        idx_valid = (X != 0)
+                                   axes=None, ylim=None, theta=False):
+    # Get data to be plotted
+    if theta:
+        e, f, fXYZ, nuz, theta = get_force_extension_nuz(simulation, theta=theta)
     else:
-        idx_valid = np.logical_and(abs(THETA_DIFF) > 0*math.pi/180,
-                                   abs(THETA_DIFF) < 45*math.pi/180)
+        e, f, fXYZ, nuz = get_force_extension_nuz(simulation)
 
     if axes is None:
         fig, axes = plt.subplots(2, 1)
@@ -3607,15 +3639,14 @@ def plot_simulated_force_extension(simulation, x=None, y=None, yXYZ=None,
     ax2._get_lines.prop_cycler = ax._get_lines.prop_cycler
 
     # Plot simulated unzipping curve
-    ax.plot(EXT_APP_avg[idx_valid]*1e9, F0d_avg[idx_valid]*1e12,
-            label='Force bead')
+    ax.plot(e * 1e9, f * 1e12, label='Force microsphere')
 
     # Plot measured unzipping curve
     if x is not None and y is not None:
         ax.plot(x * 1e9, y * 1e12)
 
     # Plot number of simulated unzipped basepairs
-    ax2.plot(EXT_APP_avg[idx_valid]*1e9, NUZ0_avg[idx_valid], color='cyan')
+    ax2.plot(e * 1e9, nuz, color='cyan')
 
     ax.grid(True)
 
@@ -3626,26 +3657,28 @@ def plot_simulated_force_extension(simulation, x=None, y=None, yXYZ=None,
     ylim = ylim or (-1, 18)
     ax.set_ylim(ylim)
 
+    # Plot individual forces
     ax = axes[1]
-    ax2 = plt.twinx(ax=ax)
-    ax2.xaxis.set_visible(False)
+    if theta:
+        ax2 = plt.twinx(ax=ax)
+        ax2.xaxis.set_visible(False)
 
     # Plot simulated unzipping curves
-    ax.plot(EXT_APP_avg[idx_valid]*1e9, F0XYZ_avg[idx_valid]*1e12)
+    ax.plot(e * 1e9, fXYZ * 1e12)
 
     # Plot measured unzipping curves
     if x is not None and yXYZ is not None:
         ax.plot(x * 1e9, np.abs(yXYZ) * 1e12)
 
-    # Plot plot differenc of angle r0 and r
-    ax2.plot(EXT_APP_avg[idx_valid]*1e9, THETA_DIFF[idx_valid]*180/math.pi,
-             color='cyan')
+    if theta:
+        # Plot differenc of angle r0 and r
+        ax2.plot(e * 1e9, theta * 180 / math.pi, color='cyan')
+        ax2.set_ylabel(r'$\theta$ diff (°)')
 
     ax.grid(True)
 
     ax.set_xlabel('(Apparent) ext of construct (nm)')
     ax.set_ylabel('Force (pN)')
-    ax2.set_ylabel(r'$\theta$ diff (°)')
 
     ax.set_ylim(ylim)
     return fig, axes
