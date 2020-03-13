@@ -3660,7 +3660,7 @@ def plot_simulated_force_extension(simulation, x=None, y=None, yXYZ=None,
 
     # Plot individual forces
     ax = axes[1]
-    if theta:
+    if th:
         ax2 = plt.twinx(ax=ax)
         ax2.xaxis.set_visible(False)
 
