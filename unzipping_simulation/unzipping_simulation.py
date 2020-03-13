@@ -3626,7 +3626,7 @@ def plot_simulated_force_extension(simulation, x=None, y=None, yXYZ=None,
                                    axes=None, ylim=None, theta=False):
     # Get data to be plotted
     if theta:
-        e, f, fXYZ, nuz, theta = get_force_extension_nuz(simulation, theta=theta)
+        e, f, fXYZ, nuz, th = get_force_extension_nuz(simulation, theta=theta)
     else:
         e, f, fXYZ, nuz = get_force_extension_nuz(simulation)
 
@@ -3673,7 +3673,7 @@ def plot_simulated_force_extension(simulation, x=None, y=None, yXYZ=None,
 
     if theta:
         # Plot differenc of angle r0 and r
-        ax2.plot(e * 1e9, theta * 180 / math.pi, color='cyan')
+        ax2.plot(e * 1e9, th * 180 / math.pi, color='cyan')
         ax2.set_ylabel(r'$\theta$ diff (°)')
 
     ax.grid(True)
