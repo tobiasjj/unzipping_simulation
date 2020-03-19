@@ -3359,8 +3359,29 @@ def simulation_settings(simulation_file, **kwargs):
 
 
 def get_unzipping_simulation(simulation_settings_file, simulations_dir=None,
-                             simulation_file=None, save=True, **kwargs):
-    # Get simulation settings
+                             simulation_file=None, read=True, save=True,
+                             **kwargs):
+    """
+    simulation_settings_file : str
+        Filepath to a simulation file with the settings for the simulation.
+    simulations_dir : str
+        Directory from where to read and to where to save the simulation.
+        Defaults to '.'.
+    simulation_file : str
+        Name of the simulation file to load. If no name is supplied it defaults
+        to 'hash_key' of the settings of the `simulation_settings_file`, as
+        returned by the function `get_key()` + the file extension '.p'.
+    read : bool
+        Try to read a preexisting simulation_file. If the file does not exist
+        or `read` is False, do the simulation with the function
+        `simulate_unzipping()`.
+    save : bool
+        Save the simulation result, if the simulation could not be read.
+    **kwargs
+        Keyword arguments with settings overwriting the default settings of the
+        `simulation_settings_file`.
+    """
+    # Get simulation settings and settings encoded as hash key
     simulation = simulation_settings(simulation_settings_file, **kwargs)
     hash_key = get_key(**simulation['settings'])
 
@@ -3370,11 +3391,11 @@ def get_unzipping_simulation(simulation_settings_file, simulations_dir=None,
     simulation_file = os.path.join(simulations_dir, simulation_file)
 
     # Load or do the simulation
-    try:
+    if read and os.path.isfile(simulation_file):
         with open(simulation_file, 'rb') as f:
             simulation = pickle.load(f)
         return simulation
-    except FileNotFoundError:
+    else:
         # Do the simulation
         simulation = simulate_unzipping(simulation)
 
