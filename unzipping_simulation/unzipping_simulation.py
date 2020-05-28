@@ -424,7 +424,7 @@ class DNA_MODEL_APPROX(object):
 
     def calculate_approximation(self, key, verbose=False):
         # if verbose:
-        #     print('\rCalculating approximation model for {:04d} ...'
+        #     print('Calculating approximation model for {:04d} ...\r'
         #           ''.format(key), end='', flush=True)
         # Set default values for model
         kwargs = self._kwargs
@@ -691,7 +691,7 @@ def init_buf_E_ext_ssDNA(read=True, write=False, filename='E_ext_ssDNA',
         # Define a closure to be executed by the pool
         def f(nbs):
             # E_ext_ssDNA, nbs = args
-            print('\rCalculating approximation model for nbs = {:04d} ...'
+            print('Calculating approximation model for nbs = {:04d} ...\r'
                   ''.format(nbs), end='', flush=True)
             return E_ext_ssDNA.calculate_approximation(nbs)
         f = unboundfunction(f)
@@ -708,7 +708,7 @@ def init_buf_E_ext_ssDNA(read=True, write=False, filename='E_ext_ssDNA',
             # args = [(E_ext_ssDNA, nbs) for nbs in nob]
             aps_E_ext_ssDNA = pool.map(f, nob)
             stop = time.time()
-            print('\nDone, elapsed time: {:.1f} s'.format(stop - start))
+            print('Done, elapsed time: {:.1f} s'.format(stop - start))
 
         for ap in aps_E_ext_ssDNA:
             E_ext_ssDNA.set_approximation(ap)
@@ -3410,52 +3410,53 @@ def get_unzipping_simulation(simulation_settings_file, simulations_dir=None,
 
 
 """
-def get_simulation_results(simulation):
-    # Get the unzipping construct parameters
-    bases = simulation['settings']['bases']
-    nbs = simulation['settings']['nbs']
-    nbp = simulation['settings']['nbp']
-    nbs_loop = simulation['settings']['nbs_loop']
-    S = simulation['settings']['S']
-    L_p_ssDNA = simulation['settings']['L_p_ssDNA']
-    z = simulation['settings']['z']
-    pitch = simulation['settings']['pitch']
-    L_p_dsDNA = simulation['settings']['L_p_dsDNA']
+# Structure of a simulation
 
-    # Get other experimental parameters
-    radius = simulation['settings']['radius']
-    angles_r0 = simulation['settings']['angles_r0']
-    kappa = simulation['settings']['kappa']
-    k_rot = simulation['settings']['k_rot']
-    c = simulation['settings']['c']
-    T = simulation['settings']['T']
+# The unzipping construct parameters
+bases = simulation['settings']['bases']
+nbs = simulation['settings']['nbs']
+nbp = simulation['settings']['nbp']
+nbs_loop = simulation['settings']['nbs_loop']
+S = simulation['settings']['S']
+L_p_ssDNA = simulation['settings']['L_p_ssDNA']
+z = simulation['settings']['z']
+pitch = simulation['settings']['pitch']
+L_p_dsDNA = simulation['settings']['L_p_dsDNA']
 
-    # Get parameters of the simulation
-    NNBP = simulation['settings']['NNBP']
-    x0_min = simulation['settings']['x0_min']
-    x0_max = simulation['settings']['x0_max']
-    h0 = simulation['settings']['h0']
-    y0 = simulation['settings']['y0']
-    resolution = simulation['settings']['resolution']
-    boltzmann_factor = simulation['settings']['boltzmann_factor']
+# Other experimental parameters
+radius = simulation['settings']['radius']
+angles_r0 = simulation['settings']['angles_r0']
+kappa = simulation['settings']['kappa']
+k_rot = simulation['settings']['k_rot']
+c = simulation['settings']['c']
+T = simulation['settings']['T']
 
-    # Get variables of simulated data
-    XFE, XFE0 = simulation['XFE'], simulation['XFE0']
+# Parameters of the simulation
+NNBP = simulation['settings']['NNBP']
+x0_min = simulation['settings']['x0_min']
+x0_max = simulation['settings']['x0_max']
+h0 = simulation['settings']['h0']
+y0 = simulation['settings']['y0']
+resolution = simulation['settings']['resolution']
+boltzmann_factor = simulation['settings']['boltzmann_factor']
 
-    # extension, number of unzipped basepairs, force
-    # extension of the construct
-    X = XFE['X']
-    # 3D position of the stage
-    X0 = XFE['A0'][:,0]
-    # average number of unzipped basepairs
-    NUZ0_avg = XFE['NUZ0_avg']
-    # most probable number of unzipped basepairs
-    NUZ0_max = XFE['NUZ0_max_W0']
+# Variables of simulated data
+XFE, XFE0 = simulation['XFE'], simulation['XFE0']
 
-    # Average force acting on the construct
-    F0_avg = XFE['F0_avg']
-    # Most probable force acting on the construct
-    F0_max = XFE['F0_max_W0']
+# extension, number of unzipped basepairs, force
+# extension of the construct
+X = XFE['X']
+# 3D position of the stage
+X0 = XFE['A0'][:,0]
+# average number of unzipped basepairs
+NUZ0_avg = XFE['NUZ0_avg']
+# most probable number of unzipped basepairs
+NUZ0_max = XFE['NUZ0_max_W0']
+
+# Average force acting on the construct
+F0_avg = XFE['F0_avg']
+# Most probable force acting on the construct
+F0_max = XFE['F0_max_W0']
 """
 
 
