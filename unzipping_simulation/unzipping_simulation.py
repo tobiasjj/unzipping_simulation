@@ -62,6 +62,19 @@ def coth(x):
         return (1 + np.exp(-2*x)) / (1 - np.exp(-2*x))
 
 
+_ssDNA_DEFAULT = {
+    'S': 800e-12,
+    'L_p': 7.97e-10,
+    'z': 0.537e-9
+}
+
+
+_dsDNA_DEFAULT = {
+    'pitch': 0.338e-9,
+    'L_p': 50e-9
+}
+
+
 def ext_ssDNA(F, nbs=0, S=None, L_p=None, z=None, T=298.2, avoid_neg_ext=True):
     """
     Freely jointed chain (FJC) model, relating the total polymer length
@@ -99,9 +112,9 @@ def ext_ssDNA(F, nbs=0, S=None, L_p=None, z=None, T=298.2, avoid_neg_ext=True):
     float
         Extension in m
     """
-    S = S or 800e-12
-    L_p = L_p or 7.97e-10
-    z = z or 0.537e-9
+    S = S or _ssDNA_DEFAULT['S']
+    L_p = L_p or _ssDNA_DEFAULT['L_p']
+    z = z or _ssDNA_DEFAULT['z']
 
     if F == 0:
         return 0
@@ -213,7 +226,7 @@ def _F_ssDNA(x, nbs=0, S=None, L_p=None, z=None, T=298.2, f_min=None,
 def _ext_dsDNA_wlc(F, nbp=0, pitch=None, L_p=None, T=298.2, x_min=0e-12,
                    xtol=1e-15):
     # See also default value in function in `F_dsDNA_wlc`
-    pitch = pitch or 0.338e-9
+    pitch = pitch or _dsDNA_DEFAULT['pitch']
     if F == 0:
         return 0
 
@@ -268,8 +281,8 @@ def F_dsDNA_wlc(x, nbp=0, pitch=None, L_p=None, T=298.2):
     1D numpy.ndarray of type float
         Force (N).
     """
-    pitch = pitch or 0.338e-9
-    L_p = L_p or 50e-9
+    pitch = pitch or _dsDNA_DEFAULT['pitch']
+    L_p = L_p or _dsDNA_DEFAULT['L_p']
 
     if x == 0:
         return 0
@@ -1977,8 +1990,8 @@ def E_ext_dsDNA_wlc(x, nbp=0, pitch=None, L_p=None, T=298.2):
     T : float
         Temperature (K)
     """
-    pitch = pitch or 0.338e-9
-    L_p = L_p or 50e-9
+    pitch = pitch or _dsDNA_DEFAULT['pitch']
+    L_p = L_p or _dsDNA_DEFAULT['L_p']
 
     if nbp <= 0:
         return 0
