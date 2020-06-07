@@ -3567,7 +3567,7 @@ def get_energies(simulation, displacement=None, force=None, nuz=None):
     # Calculate all NUZs and NBSs
     if displacement is None or force is None or nuz is None:
         sim_values = get_simulation_values(simulation)
-    D = sim_values['displacement'] if displacement is None else displacement
+    D = sim_values['dXYZ'] if displacement is None else displacement
     F0 = sim_values['force'].astype(float) if force is None else force
     nuz = sim_values['nuz'].astype(float) if nuz is None else nuz
     NUZ = np.round(nuz).astype(int)
