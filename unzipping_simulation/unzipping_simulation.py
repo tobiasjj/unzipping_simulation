@@ -2085,7 +2085,7 @@ def E_tot(bases='', nuz=0, nbs=0, x_ss=0.0, nbp=0, x_ds=0.0,
         Free energy for opening the last bp and terminal hairpin (kcal/mol).
     """
 
-    e_ext_ssDNA = E_ext_ssDNA(x_ss, nbs=nbs, z=z, L_p=L_p_ssDNA, S=S, T=T)
+    e_ext_ssDNA = E_ext_ssDNA(x_ss, nbs=nbs, S=S, L_p=L_p_ssDNA, z=z, T=T)
     e_ext_dsDNA = E_ext_dsDNA_wlc(x_ds, nbp=nbp, pitch=pitch, L_p=L_p_dsDNA,
                                   T=T)
     e_unzip_DNA = E_unzip_DNA(bases, nuz=nuz, NNBP=NNBP, c=c, T=T)
@@ -3473,7 +3473,7 @@ F0_max = XFE['F0_max_W0']
 """
 
 
-def get_force_extension_nuz(simulation, theta=False):
+def get_simulation_values(simulation):
     """
     Get extension, force, and number of unzipped basepairs of a simulation.
     """
@@ -3493,8 +3493,9 @@ def get_force_extension_nuz(simulation, theta=False):
         # Fallback to extension of the construct
         EXT_APP_avg = X
 
-    # Average force acting on the microsphere
-    F0XYZ_avg = np.array([xfe0['D0_avg'] * kappa for xfe0 in XFE0])
+    # Averaged displacement and force acting on the microsphere
+    D0XYZ_avg = np.array([xfe0['D0_avg'] for xfe0 in XFE0])
+    F0XYZ_avg = D0XYZ_avg * kappa
     F0d_avg = np.sqrt(np.sum(np.power(F0XYZ_avg, 2), axis=1))
     # should be the same as:
     # F0d_avg = np.array([(np.sqrt(((xfe0['D0'] * kappa)**2).sum(axis=1))
@@ -3515,12 +3516,94 @@ def get_force_extension_nuz(simulation, theta=False):
         idx_valid = np.logical_and(abs(THETA_DIFF) > 0*math.pi/180,
                                    abs(THETA_DIFF) < 45*math.pi/180)
 
-    if theta:
-        return (EXT_APP_avg[idx_valid], F0d_avg[idx_valid],
-                F0XYZ_avg[idx_valid], NUZ0_avg[idx_valid],
-                THETA_DIFF[idx_valid])
-    return (EXT_APP_avg[idx_valid], F0d_avg[idx_valid], F0XYZ_avg[idx_valid],
-            NUZ0_avg[idx_valid])
+    return_value = {
+        'extension': EXT_APP_avg[idx_valid],
+        'dXYZ': D0XYZ_avg[idx_valid],
+        'fXYZ': F0XYZ_avg[idx_valid],
+        'force': F0d_avg[idx_valid],
+        'nuz': NUZ0_avg[idx_valid],
+        'theta': THETA_DIFF[idx_valid]
+    }
+
+    return return_value
+
+
+def get_energies(simulation, displacement=None, force=None, nuz=None):
+    """
+    Get energies from simulation
+
+    Parameters
+    ----------
+    simulation : dict
+        Simulation with the settings used for the calculation of the energies
+    force : Iterable
+        1D array of forca acting on the unzipping construct
+    nuz : Iterable
+        1D array of number of unzippped baspairs
+    displacement : Iterable
+        2D array with displacement in X or Y and Z
+
+    Returns
+    -------
+    dict
+        Energies for ssDNA and dsDNA extension, lever/handle displacement,
+        and basepair unzipping.
+    """
+    bases = simulation['settings']['bases']
+    S = simulation['settings']['S']
+    L_p_ssDNA = simulation['settings']['L_p_ssDNA']
+    z = simulation['settings']['z']
+
+    nbp = simulation['settings']['nbp']
+    pitch = simulation['settings']['pitch']
+    L_p_dsDNA = simulation['settings']['L_p_dsDNA']
+
+    kappa = simulation['settings']['kappa']
+    bases = simulation['settings']['bases']
+    NNBP = simulation['settings']['NNBP']
+    c = simulation['settings']['c']
+    T = simulation['settings']['T']
+
+    # Calculate all NUZs and NBSs
+    if displacement is None or force is None or nuz is None:
+        sim_values = get_simulation_values(simulation)
+    D = sim_values['displacement'] if displacement is None else displacement
+    F0 = sim_values['force'].astype(float) if force is None else force
+    nuz = sim_values['nuz'].astype(float) if nuz is None else nuz
+    NUZ = np.round(nuz).astype(int)
+    NBS = simulation['settings']['nbs'] + NUZ * 2
+
+    E_EXT_SSDNA = []
+    E_EXT_DSDNA = []
+    E_UNZIP_DNA = []
+    E_LEV = []
+    nuz_old = -1
+    for d, f, nuz, nbs in zip(D, F0, NUZ, NBS):
+        if nuz != nuz_old:
+            x_ss = ext_ssDNA(f, nbs=nbs, S=S, L_p=L_p_ssDNA, z=z, T=T)
+            x_ds = ext_dsDNA_wlc(f, nbp=nbp, pitch=pitch, L_p=L_p_dsDNA, T=T)
+            e_ext_ssDNA = E_ext_ssDNA(x_ss, nbs=nbs, S=S, L_p=L_p_ssDNA, z=z,
+                                      T=T)
+            e_ext_dsDNA = E_ext_dsDNA_wlc(x_ds, nbp=nbp, pitch=pitch,
+                                          L_p=L_p_dsDNA, T=T)
+            e_unzip_DNA = E_unzip_DNA(bases, nuz=nuz, NNBP=NNBP, c=c, T=T)
+            e_lev = np.sum(E_lev(d, kappa)).astype(float)
+            nuz_old = nuz
+
+        # else: reuse energies from the loop before
+        E_EXT_SSDNA.append(e_ext_ssDNA)
+        E_EXT_DSDNA.append(e_ext_dsDNA)
+        E_UNZIP_DNA.append(e_unzip_DNA)
+        E_LEV.append(e_lev)
+
+    energies = {
+        'e_ext_ssDNA': np.array(E_EXT_SSDNA).astype(float),
+        'e_ext_dsDNA': np.array(E_EXT_DSDNA).astype(float),
+        'e_unzip_DNA': np.array(E_UNZIP_DNA).astype(float),
+        'e_lev': np.array(E_LEV).astype(float)
+    }
+
+    return energies
 
 
 def simulate_unzipping(simulation_settings, processes=8):
@@ -3660,10 +3743,12 @@ def plot_unzip_energy_rot(x0, y0=0.0, h0=0.0, bases='', nuz_est=-1, nbs=0,
 def plot_simulated_force_extension(simulation, x=None, y=None, yXYZ=None,
                                    axes=None, ylim=None, theta=False):
     # Get data to be plotted
-    if theta:
-        e, f, fXYZ, nuz, th = get_force_extension_nuz(simulation, theta=theta)
-    else:
-        e, f, fXYZ, nuz = get_force_extension_nuz(simulation)
+    sim_values = get_simulation_values(simulation)
+    e = sim_values['extension']
+    f = sim_values['force']
+    fXYZ = sim_values['fXYZ']
+    nuz = sim_values['nuz']
+    th = sim_values['theta']
 
     if axes is None:
         fig, axes = plt.subplots(2, 1)
