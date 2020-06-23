@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 #
 # Unzipping Simulation, simulate the unzipping of DNA double strands
-# Copyright 2018 Tobias Jachowski
+# Copyright 2018-2020 Tobias Jachowski
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.

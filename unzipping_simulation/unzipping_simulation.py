@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 #
 # Unzipping Simulation, simulate the unzipping of DNA double strands
-# Copyright 2018 Tobias Jachowski
+# Copyright 2018-2020 Tobias Jachowski
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -106,6 +106,8 @@ def ext_ssDNA(F, nbs=0, S=None, L_p=None, z=None, T=298.2, avoid_neg_ext=True):
         Length of a single base in m. Defaults to 0.537e-9 m.
     T : float
         Temperature in K.
+    avoid_neg_ext : bool
+        Avoid negative extension due to rounding errors close to zero.
 
     Returns
     -------
@@ -1917,7 +1919,7 @@ def E_unzip_DNA(bases, nuz=0, NNBP=False, c=None, T=298.2):
     ----------
     bases : str
         Sequence of bases 'A', 'T', 'C', and 'G'.
-    nuz : int
+    nuz : int or float
         Number of base(pair)s up to where the unpairing energy should be
         calculated ([1,`nuz`]). If `nuz` is 1, calculate energy for first
         basepair.
@@ -1930,7 +1932,12 @@ def E_unzip_DNA(bases, nuz=0, NNBP=False, c=None, T=298.2):
     # if NNBP:
         # TODO: include proper energy term for the first and last bp
 
-    return np.sum(E_pair(bases[:nuz], NNBP=NNBP, c=c, T=T))
+    ni = int(nuz)
+    nr = nuz % 1
+    E = np.sum(E_pair(bases[:ni], NNBP=NNBP, c=c, T=T))
+    E += np.sum(E_pair(bases[ni-1:ni+1], NNBP=NNBP, c=c, T=T)) * nr
+    return E
+
 
 
 def _E_ext_ssDNA(x, nbs=0, S=None, L_p=None, z=None, T=298.2):
@@ -2416,6 +2423,12 @@ def xfe0_fast_nuz(x0, h0=0.0, bases='', nuz_est=-1, nbs=0, nbp=0, nbs_loop=0,
 
     Parameters
     ----------
+    x0 : float
+        Position of the stage x (m) relative to the trap center.
+    h0 : float
+        Distance (m) of the bead surface to the glass surface, if
+        the bead is in its resting position, i.e. no force in the
+        vertical direction is applied.
     bases : str
         Sequence of sense strand of dsDNA which is (will be) unzipped
     nuz_est : int
@@ -2428,6 +2441,8 @@ def xfe0_fast_nuz(x0, h0=0.0, bases='', nuz_est=-1, nbs=0, nbp=0, nbs_loop=0,
         Number of basepairs of dsDNA spacer
     nbs_loop : int
         Number of extra ssDNA bases in the hairpin
+    radius : float
+        Radius of the bead (m).
     kappa : float
         Stiffness of lever (handle) attached to DNA in N/m
     boltzmann_factor : float
@@ -3569,28 +3584,22 @@ def get_energies(simulation, displacement=None, force=None, nuz=None):
         sim_values = get_simulation_values(simulation)
     D = sim_values['dXYZ'] if displacement is None else displacement
     F0 = sim_values['force'].astype(float) if force is None else force
-    nuz = sim_values['nuz'].astype(float) if nuz is None else nuz
-    NUZ = np.round(nuz).astype(int)
+    NUZ = sim_values['nuz'].astype(float) if nuz is None else nuz
     NBS = simulation['settings']['nbs'] + NUZ * 2
 
     E_EXT_SSDNA = []
     E_EXT_DSDNA = []
     E_UNZIP_DNA = []
     E_LEV = []
-    nuz_old = -1
     for d, f, nuz, nbs in zip(D, F0, NUZ, NBS):
-        if nuz != nuz_old:
-            x_ss = ext_ssDNA(f, nbs=nbs, S=S, L_p=L_p_ssDNA, z=z, T=T)
-            x_ds = ext_dsDNA_wlc(f, nbp=nbp, pitch=pitch, L_p=L_p_dsDNA, T=T)
-            e_ext_ssDNA = E_ext_ssDNA(x_ss, nbs=nbs, S=S, L_p=L_p_ssDNA, z=z,
-                                      T=T)
-            e_ext_dsDNA = E_ext_dsDNA_wlc(x_ds, nbp=nbp, pitch=pitch,
-                                          L_p=L_p_dsDNA, T=T)
-            e_unzip_DNA = E_unzip_DNA(bases, nuz=nuz, NNBP=NNBP, c=c, T=T)
-            e_lev = np.sum(E_lev(d, kappa)).astype(float)
-            nuz_old = nuz
+        x_ss = ext_ssDNA(f, nbs=nbs, S=S, L_p=L_p_ssDNA, z=z, T=T)
+        x_ds = ext_dsDNA_wlc(f, nbp=nbp, pitch=pitch, L_p=L_p_dsDNA, T=T)
+        e_ext_ssDNA = E_ext_ssDNA(x_ss, nbs=nbs, S=S, L_p=L_p_ssDNA, z=z, T=T)
+        e_ext_dsDNA = E_ext_dsDNA_wlc(x_ds, nbp=nbp, pitch=pitch,
+                                      L_p=L_p_dsDNA, T=T)
+        e_unzip_DNA = E_unzip_DNA(bases, nuz=nuz, NNBP=NNBP, c=c, T=T)
+        e_lev = np.sum(E_lev(d, kappa))
 
-        # else: reuse energies from the loop before
         E_EXT_SSDNA.append(e_ext_ssDNA)
         E_EXT_DSDNA.append(e_ext_dsDNA)
         E_UNZIP_DNA.append(e_unzip_DNA)
