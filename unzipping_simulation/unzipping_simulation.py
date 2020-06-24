@@ -758,7 +758,6 @@ class _xfe0_nuz_chained(object):
                  boltzmann_factor=1e-9, verbose=False):
         if nuz_est == -1:
             nuz_est = self.nuz_est
-        # print('x0 {}, nuz_est {}'.format(x0, nuz_est))
         r = xfe0_nuz(A0, bases=bases, nuz_est=nuz_est, nbs=nbs, nbp=nbp,
                      nbs_loop=nbs_loop,
                      radius=radius, kappa=kappa,
@@ -2013,8 +2012,8 @@ def plot_simulated_force_extension(simulation, x=None, y=None, yXYZ=None,
     return fig, axes
 
 
-def plot_unzip_energy(x0, y0=0.0, h0=0.0, bases='', nuz_est=-1, nbs=0,
-                      nbp=0, nbs_loop=0,
+def plot_unzip_energy(x0, y0=0.0, h0=0.0, bases='', nuz_est=-1, nbs=0, nbp=0,
+                      nbs_loop=0,
                       radius=0.0, kappa=None,
                       S=None, L_p_ssDNA=None, z=None,
                       pitch=None, L_p_dsDNA=None,
