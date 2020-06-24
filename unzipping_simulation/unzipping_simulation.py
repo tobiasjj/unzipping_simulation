@@ -315,7 +315,8 @@ def get_key(x0_min, x0_max, y0, h0, resolution,
             radius, kappa,
             S, L_p_ssDNA, z,
             pitch, L_p_dsDNA,
-            NNBP, c, e_loop, T, boltzmann_factor):
+            NNBP, c, e_loop, T, boltzmann_factor,
+            **kwargs):
     hasher = hashlib.md5()
     for c in [x0_min, x0_max, y0, h0, resolution,
               bases.capitalize(), nbs, nbp, nbs_loop,
@@ -556,7 +557,7 @@ def xfe0_fast_nuz(A0, bases='', nuz_est=-1, nbs=0, nbp=0, nbs_loop=0,
                                 radius=radius, kappa=kappa,
                                 S=S, L_p_ssDNA=L_p_ssDNA, z=z,
                                 pitch=pitch, L_p_dsDNA=L_p_dsDNA,
-                                NNBP=NNBP, c=c, e_loop=e_loop, T=T,
+                                NNBP=NNBP, c=c, T=T,
                                 spacing=spacing, min_stepsize=min_stepsize,
                                 verbose=verbose)
     else:
@@ -743,14 +744,14 @@ class _xfe0_fast_nuz_chained(object):
         if nuz_est == -1:
             nuz_est = self.nuz_est
         # print('x0 {}, nuz_est {}'.format(x0, nuz_est))
-        r = xfe0_fast_nuz(A0, bases=bases, nuz_est=nuz_est, nbs=nbs,
-                          nbp=nbp, nbs_loop=nbs_loop,
+        r = xfe0_fast_nuz(A0, bases=bases, nuz_est=nuz_est, nbs=nbs, nbp=nbp,
+                          nbs_loop=nbs_loop,
                           radius=radius, kappa=kappa,
                           S=S, L_p_ssDNA=L_p_ssDNA, z=z,
                           pitch=pitch, L_p_dsDNA=L_p_dsDNA,
                           NNBP=NNBP, c=c, e_loop=e_loop, T=T,
-                          boltzmann_factor=boltzmann_factor,
-                          verbose=verbose)
+                          spacing=spacing, min_stepsize=min_stepsize,
+                          boltzmann_factor=boltzmann_factor, verbose=verbose)
         self.nuz_est = int(round(r['NUZ0_avg']))
         return r
 
@@ -1078,7 +1079,7 @@ def F_0(A0, nbs=0, S=None, L_p_ssDNA=None, z=None, T=298.2,
         if A0[1] == 0.0 and len(kappa) == 2:
             # Simulate in 2D only (3x as fast as 3D)
             x0 = A0[0]
-            z0 = A0[2]
+            z0 = - A0[2] - radius
             f_construct, d = F_construct_2D(x0, z0=z0, x_ss=x_ss, x_ds=x_ds,
                                             radius=radius, kappa=kappa)
         else:
@@ -1384,19 +1385,20 @@ def F_construct_2D(x0, z0=0.0, x_ss=0.0, x_ds=0.0, radius=0.0, kappa=0.0,
     #   dx is the horizontal displacement of the bead (x or y)
     #   dz is the vertical displacement of the bead (z)
     r = radius
+    z0_r = z0 + r
     # a = x0 - dx
-    # b = z0 + r - dz
+    # b = z0_r - dz
     c = x_ss + x_ds + r
     # a**2 + b**2 = c**2
     # ->
-    # (x0 - dx)**2 + (z0 + r - dz)**2 = c**2
-    # dz = z0 + r - math.sqrt(c**2 - (x0 - dx)**2)
-    # dx = x0 - math.sqrt(c**2 - (z0 + r - dz)**2)
+    # (x0 - dx)**2 + (z0_r - dz)**2 = c**2
+    # dz = z0_r - math.sqrt(c**2 - (x0 - dx)**2)
+    # dx = x0 - math.sqrt(c**2 - (z0_r - dz)**2)
 
     # construct is longer than possible stretching with dx/dz >= 0.
     # -> bead will equilibrate in the middle of the trap with zero force
-    if c**2 >= x0**2 + (z0 + r)**2:
-        return 0.0, 0.0, 0.0
+    if c**2 >= x0**2 + (z0_r)**2:
+        return 0.0, (0.0, 0.0)
 
     # If z0 is 0 or the stiffness of z is 0 bead will always
     # touch the surface and dx only depends on x0, x_ss, x_ds, and r.
@@ -1411,26 +1413,26 @@ def F_construct_2D(x0, z0=0.0, x_ss=0.0, x_ds=0.0, radius=0.0, kappa=0.0,
         cos_alpha = (x0 - dx) / c
         fxz = fx / cos_alpha
 
-        return fxz, dx, dz
+        return fxz, (dx, dz)
 
     # displacement dz dependent upon dx
     def _dz(dx):
         # print('z0 {:.1e}, c {:.1e}, x0 {:.1e}, dx {:.1e}'
         #       ''.format(z0, c, x0, dx))
-        return z0 + r - math.sqrt(c**2 - (x0 - dx)**2)
+        return z0_r - math.sqrt(c**2 - (x0 - dx)**2)
 
     # displacement dx dependent upon dz
     def _dx(dz):
         # x0 8.0e-07, c 1.3e-07, z0 2.0e-07, r 0.0e+00, dz 0.0e+00
         # print('x0 {:.1e}, c {:.1e}, z0 {:.1e}, r {:.1e}, dz {:.1e}'
         #       ''.format(x0, c, z0, r, dz))
-        return x0 - math.sqrt(c**2 - (z0 + r - dz)**2)
+        return x0 - math.sqrt(c**2 - (z0_r - dz)**2)
 
     # difference of the ratio of the force in x/z to the ratio of a/b
     # the construct with the handle equilibrates where diff == 0
     def diff_tan_fxz_ab(dx):
         a = x0 - dx
-        b = z0 + r - _dz(dx)
+        b = z0_r - _dz(dx)
         fx = dx * kappa[0]
         fz = _dz(dx) * kappa[1]
         diff = b/a - fz/fx
@@ -1440,8 +1442,8 @@ def F_construct_2D(x0, z0=0.0, x_ss=0.0, x_ds=0.0, radius=0.0, kappa=0.0,
         #                 / (dx * kappa[0])
         return diff**2
 
-    # if construct is shorter than z0 + r, dz has to be at least the difference
-    dz_min = max(0, z0 + r - c)
+    # if construct is shorter than z0_r, dz has to be at least the difference
+    dz_min = max(0, z0_r - c)
     # dz can be at max as large as z0, then the bead touches the surface
     dz_max = z0
     # dx has to be at least x0 - c
@@ -1466,11 +1468,11 @@ def F_construct_2D(x0, z0=0.0, x_ss=0.0, x_ds=0.0, radius=0.0, kappa=0.0,
     fxz = fx / cos_alpha
 
     # print(dx, dz_min, dz_max, dx_min, dx_max)
-    # dz = z0 + r - math.sqrt(c**2 - (x0 - dx)**2)
+    # dz = z0_r - math.sqrt(c**2 - (x0 - dx)**2)
     # print('dx {:.1e}, dz {:.1e}'
-    #       ''.format(dx, z0 + r - math.sqrt(c**2 - (x0 - dx)**2)))
+    #       ''.format(dx, z0_r - math.sqrt(c**2 - (x0 - dx)**2)))
     # a = x0 - dx
-    # b = z0 + r - _dz(dx)
+    # b = z0_r - _dz(dx)
     # print('x0 {:.3e}, a {:.3e}, b {:.3e}, c {:.3e}'.format(x0, a, b, c))
     # #print('dx {:.3e}, dz {:.3e}, fx{:.1e}, fz {:.1e}'
     # #      ''.format(dx, _dz(dx), dx*kappa[0], _dz(dx)*kappa[1]))
