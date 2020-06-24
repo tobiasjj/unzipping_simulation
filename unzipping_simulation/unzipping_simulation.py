@@ -521,8 +521,10 @@ def xfe0_nuz(A0, bases='', nuz_est=-1, nbs=0, nbp=0, nbs_loop=0,
     fluctuate. Fluctuations of the extensions of the DNA and the bead in the
     trap are ignored.
 
-    Speed up calculation, i.e. calculate only around the most likely nuz and,
-    if no nuz_est given, perform binary search to find most likely nuz, first.
+    Speed up calculation, i.e. only select the number of unzipped bases, at
+    which the unzipping fork will fluctuate. Calculate only around the most
+    likely nuz and, if no nuz_est is given, perform binary search to find most
+    likely nuz, first.
 
     Parameters
     ----------
@@ -655,11 +657,10 @@ def xfe0_nuz(A0, bases='', nuz_est=-1, nbs=0, nbp=0, nbs_loop=0,
     W0 = np.array(W0)
     idx_vld = W0 / w0_likely >= boltzmann_factor
 
-    # Sort nuz in ascending order
+    # Sort nuz and other values in ascending order
     NUZ0 = np.array(NUZ0)[idx_vld]
     idx_srt = np.argsort(NUZ0)
     NUZ0 = NUZ0[idx_srt]
-
     X0_ss = np.array(X0_ss)[idx_vld][idx_srt]
     X0_ds = np.array(X0_ds)[idx_vld][idx_srt]
     D0 = np.array(D0)[idx_vld][idx_srt]
@@ -667,40 +668,26 @@ def xfe0_nuz(A0, bases='', nuz_est=-1, nbs=0, nbp=0, nbs_loop=0,
     E0 = np.array(E0)[idx_vld][idx_srt]
     W0 = W0[idx_vld][idx_srt]
 
-    # Calculate weighted averages of:
+    # Calculate weighted averages of unzipped basepairs, bead displacements,
+    # force, and extension of the construct
     W0_sum = W0.sum()
     P0 = W0 / W0_sum
-    #   unzipped basepairs
     NUZ0_avg = (NUZ0 * W0).sum() / W0_sum
-    #   bead displacements
     D0_avg = (D0 * W0[np.newaxis].T).sum(axis=0) / W0_sum
-    #   force
     F0_avg = (F0 * W0).sum() / W0_sum
-    #   extension of the construct
     X_avg = ((X0_ss + X0_ds) * W0).sum() / W0_sum
 
-    # Automatically detect the number of unzipped bases, at which
-    # the unzipping fork will fluctuate, i.e. select the
-    # number of basepairs which have significant weights (weights
-    # with a minimum probability compared to the largest weight).
-    # Calculate later used variables.
+    # Select values of most likely state
     idx_max = W0.argmax()
     NUZ0_max_W0 = NUZ0[idx_max]
     F0_max_W0 = F0[idx_max]
     W0_max = W0[idx_max]
-
-    # boltzmann_factor = 1e-9
-    # mpmath.exp(-20) > 1e-9 -> corresponds to more than 20 kT difference
-    NUZ0_min = NUZ0.min()
-    NUZ0_max = NUZ0.max()
 
     r = {
         'X_avg': X_avg,
         'NUZ0': NUZ0,
         'NUZ0_avg': NUZ0_avg,
         'NUZ0_max_W0': NUZ0_max_W0,
-        'NUZ0_min': NUZ0_min,
-        'NUZ0_max': NUZ0_max,
         'D0': D0,
         'D0_avg': D0_avg,
         'F0': F0,
@@ -2062,9 +2049,7 @@ def plot_unzip_energy(x0, y0=0.0, h0=0.0, bases='', nuz_est=-1, nbs=0, nbp=0,
     # ax.axhline(xfe0['D0_avg'])
     ax2.plot(nuz, boltzmann_factor)
     ax2.plot(nuz, cumsum)
-    # ax.axvline(xfe0['NUZ0_min'], c='cyan')
     ax.axvline(xfe0['NUZ0_avg'], c='magenta')
-    # ax.axvline(xfe0['NUZ0_max'], c='cyan')
 
     ax.set_xlabel('Number of unzipped basepairs')
     ax.set_ylabel('Energy difference ($k_{B}*T$)')
