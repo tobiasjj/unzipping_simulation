@@ -50,8 +50,7 @@ boltzmann_factor = simulation['settings']['boltzmann_factor']
 # Variables of simulated data
 XFE, XFE0 = simulation['XFE'], simulation['XFE0']
 
-# extension, number of unzipped basepairs, force
-# extension of the construct
+# extension, number of unzipped basepairs, force extension of the construct
 X = XFE['X']
 # 3D position of the stage
 X0 = XFE['A0'][:,0]
@@ -65,14 +64,26 @@ F0_avg = XFE['F0_avg']
 # Most probable force acting on the construct
 F0_max = XFE['F0_max_W0']
 
+
+The unzipping simulation package was written with several calculation speed
+improvements. An old version of the unzipping simulation was carefully tested
+with different settings and algorithms, to find the best strategy of getting
+the simulation done as fast as possible. The results are documented here to
+give an insight into the different approaches, i.e. parallelization,
+boltzmann_factor, binary search of estimated number of unzipped basepairs,
+iteratively use simulated number of unzipped basepairs for one stage
+displacement of a previous calculation as the estimated number of unzipped
+basepairs for the subsequent calculation, precalculation and bufering of
+WLC/FJC extension/force/energy models:
+
 # timeit results:
 #x0 = 800e-9
-#xfe0 = xfe0_fast_nuz(x0, bases=bases, nbs=nbs, nbp=nbp, nbs_loop=nbs_loop,
-#                     kappa=kappa,
-#                     S=S, L_p_ssDNA=L_p_ssDNA, z=z,
-#                     pitch=pitch, L_p_dsDNA=L_p_dsDNA,
-#                     NNBP=NNBP, c=c, T=T,
-#                     boltzmann_factor=1e-5)
+#xfe0 = xfe0_nuz(A0, bases=bases, nbs=nbs, nbp=nbp, nbs_loop=nbs_loop,
+#                radius=radius, kappa=kappa,
+#                S=S, L_p_ssDNA=L_p_ssDNA, z=z,
+#                pitch=pitch, L_p_dsDNA=L_p_dsDNA,
+#                NNBP=NNBP, c=c, T=T,
+#                boltzmann_factor=1e-5)
 
 # Time needed with current settings:
 # RS: 140 s
@@ -414,24 +425,22 @@ def unzipping_force_energy(x0_min, x0_max, y0=0.0, h0=0.0, resolution=1e-9,
     resolution = int(np.round((x0_max - x0_min) / resolution + 1))
     X0 = np.linspace(x0_min, x0_max, resolution)
 
-    # Speed up calculation with the multiprocessing package,
-    # by taking the nuz_est from previous calculation for
-    # each subsequent calculation
-    xfe0_fast_nuz = _xfe0_fast_nuz_chained()
+    # Speed up calculation with the multiprocessing package by taking the
+    # nuz_est from previous calculation for each subsequent calculation
+    xfe0_nuz = _xfe0_nuz_chained()
 
     # Define a closure to be executed by the pool
     def f(x0):
         print('\rCalculating equilibrium for stage displacement x0 = {:.3e}'
               '...'.format(x0), end='', flush=True)
         A0 = attachment_point(x0, y0=y0, h0=h0, radius=radius)
-        return xfe0_fast_nuz(A0, bases=bases, nbs=nbs, nbp=nbp,
-                             nbs_loop=nbs_loop,
-                             radius=radius, kappa=kappa,
-                             S=S, L_p_ssDNA=L_p_ssDNA, z=z,
-                             pitch=pitch, L_p_dsDNA=L_p_dsDNA,
-                             NNBP=NNBP, c=c, e_loop=e_loop, T=T,
-                             spacing=spacing, min_stepsize=min_stepsize,
-                             boltzmann_factor=boltzmann_factor)
+        return xfe0_nuz(A0, bases=bases, nbs=nbs, nbp=nbp, nbs_loop=nbs_loop,
+                        radius=radius, kappa=kappa,
+                        S=S, L_p_ssDNA=L_p_ssDNA, z=z,
+                        pitch=pitch, L_p_dsDNA=L_p_dsDNA,
+                        NNBP=NNBP, c=c, e_loop=e_loop, T=T,
+                        spacing=spacing, min_stepsize=min_stepsize,
+                        boltzmann_factor=boltzmann_factor)
     f = unboundfunction(f)
 
     # Process function in pool with 8 parallelly executed processes
@@ -443,11 +452,11 @@ def unzipping_force_energy(x0_min, x0_max, y0=0.0, h0=0.0, resolution=1e-9,
 
     # combine all individually simulated points into one array
     XFE = {
-        'X': np.array([xfe0['x_avg'] for xfe0 in XFE0]),
+        'X': np.array([xfe0['X_avg'] for xfe0 in XFE0]),
         'X0': np.array([xfe0['settings']['A0'][0] for xfe0 in XFE0]),
-        'D0_avg': np.array([xfe0['D0_avg'] for xfe0 in XFE0]),
         'NUZ0_avg': np.array([xfe0['NUZ0_avg'] for xfe0 in XFE0]),
         'NUZ0_max_W0': np.array([xfe0['NUZ0_max_W0'] for xfe0 in XFE0]),
+        'D0_avg': np.array([xfe0['D0_avg'] for xfe0 in XFE0]),
         'F0_avg': np.array([xfe0['F0_avg'] for xfe0 in XFE0]),
         'F0_max_W0': np.array([xfe0['F0_max_W0'] for xfe0 in XFE0]),
         'settings': {
@@ -498,18 +507,22 @@ def attachment_point(x0, y0=0.0, h0=0.0, radius=0.0):
     return np.array([x0, y0, - (h0 + radius)])
 
 
-def xfe0_fast_nuz(A0, bases='', nuz_est=-1, nbs=0, nbp=0, nbs_loop=0,
-                  radius=0.0, kappa=None,
-                  S=None, L_p_ssDNA=None, z=None,
-                  pitch=None, L_p_dsDNA=None,
-                  NNBP=False, c=0, e_loop=0.0, T=298.2,
-                  spacing=5, min_stepsize=10,
-                  boltzmann_factor=1e-9, verbose=False):
+def xfe0_nuz(A0, bases='', nuz_est=-1, nbs=0, nbp=0, nbs_loop=0,
+             radius=0.0, kappa=None,
+             S=None, L_p_ssDNA=None, z=None,
+             pitch=None, L_p_dsDNA=None,
+             NNBP=False, c=0, e_loop=0.0, T=298.2,
+             spacing=5, min_stepsize=10,
+             boltzmann_factor=1e-9, verbose=False):
     """
     Calculate the equilibrium extensions, forces and energies for a given stage
     displacement `x0` for most probable numbers of unzipped basepairs and find
     the number of unzipped bases, at which the unzipping fork will most likely
-    fluctuate.
+    fluctuate. Fluctuations of the extensions of the DNA and the bead in the
+    trap are ignored.
+
+    Speed up calculation, i.e. calculate only around the most likely nuz and,
+    if no nuz_est given, perform binary search to find most likely nuz, first.
 
     Parameters
     ----------
@@ -538,7 +551,8 @@ def xfe0_fast_nuz(A0, bases='', nuz_est=-1, nbs=0, nbp=0, nbs_loop=0,
         has to have relative to the most probable one to be considered in the
         calculation. The smaller the boltzmann_factor, the more exact the
         result is. The larger the boltzmann factor is, the faster the
-        calculation.
+        calculation. The default of 1e-9 corresponds to more than 20 kT
+        difference (mpmath.exp(-20) > 1e-9).
     """
     # Maximum number of unzippabel bps
     nuz_max = len(bases)
@@ -548,11 +562,14 @@ def xfe0_fast_nuz(A0, bases='', nuz_est=-1, nbs=0, nbp=0, nbs_loop=0,
     if nbs_loop > 0:
         nuz_max += 1
 
+    # Either select number of unzipped basepairs with low energy state only, or
+    # select all possible number of unzipped basepairs.
     if boltzmann_factor <= 0:
         # All nuz will be calculated, start in the middle
         nuz_est = int(round(nuz_max / 2))
     elif nuz_est < 0:
-        # Autodetermine the approximate nuz which will be in equilibrium
+        # Autodetermine the approximate nuz which will have the lowest energy
+        # state, i.e. will be in equilibrium between open and closed state.
         nuz_est = approx_eq_nuz(A0, bases=bases, nbs=nbs, nbp=nbp,
                                 radius=radius, kappa=kappa,
                                 S=S, L_p_ssDNA=L_p_ssDNA, z=z,
@@ -565,13 +582,10 @@ def xfe0_fast_nuz(A0, bases='', nuz_est=-1, nbs=0, nbp=0, nbs_loop=0,
         nuz_est = max(0, nuz_est)
         nuz_est = min(nuz_est, nuz_max)
 
-    # Go through all possible numbers of unzipped basepairs
-    # and calculate the equilibrium forces and energies, while
-    # ignoring the fluctuations of the extensions of the DNA
-    # and the bead in the trap
-    #
-    # Speed up calculation, i.e. calculate only around the most likely nuz:
-    # 1. If no nuz_est given, perform binary search to find most likely nuz
+    # Find and calculate energy for the most likely nuzes, i.e. nuzes with a
+    # low energy state. First, define a function to calculate force, extension,
+    # energy, and weight for a given number of unzipped basepairs and define
+    # variables to be filled upon calculation.
     NUZ0 = []
     X0_ss = []
     X0_ds = []
@@ -580,8 +594,6 @@ def xfe0_fast_nuz(A0, bases='', nuz_est=-1, nbs=0, nbp=0, nbs_loop=0,
     E0 = []
     W0 = []
 
-    # Calculate force, extension, and weight for given number of unzipped
-    # basepairs
     def eq_few0(nuz, w0_likely):
         x0_ss, x0_ds, d, f0, e0 = \
             equilibrium_xfe0(A0, bases=bases, nuz=nuz, nbs=nbs, nbp=nbp,
@@ -600,23 +612,28 @@ def xfe0_fast_nuz(A0, bases='', nuz_est=-1, nbs=0, nbp=0, nbs_loop=0,
         w0 = mpmath.exp(- e0 / (kB*T))
         W0.append(w0)
 
-        # 3a. Set new minimum energy, if energy is smaller than all previous
+        # Select new minimum energy, if energy is smaller than all previous
         # calculated energies, and if energy is not calculated from max nuz
         # opened, which could result in a huge drop of the energy, due to the
         # loop opening and therefore in too many falsly neglected calculated
-        # energies, due to boltzmann_factor selection
+        # energies, due to boltzmann_factor selection.
         if w0 > w0_likely and nuz < nuz_max:
             w0_likely = w0
         stop = False
-        # 3b. if energy difference > 20 kT stop calculation
+        # Stop if energy difference > - mpmath.log(boltzmann_factor).
         if w0_likely != 0 and w0 / w0_likely < boltzmann_factor:
             stop = True
         return w0_likely, stop
 
-    # 2. Calculate energy for most likely nuz
+    # Then, Calculate energy for estimated nuz.
     w0_likely, _ = eq_few0(nuz_est, 0)
 
-    # 3. Calculate neighbouring nuzes (nuz_left / nuz_right)
+    # Iteratively find and calculate energy for the most likely nuzes:
+    # Calculate energies of neighbouring nuzes (nuz_left / nuz_right) starting
+    # from the estimated nuz. The most likely nuz is constantly tracked. The
+    # calculation is stopped, if either the weight of the nuzes do differ more
+    # than the weight of the most likely nuz times the boltzmann_factor or if
+    # there are no more nuzes left to calculate energies from.
     nuz_left = nuz_est - 1
     nuz_right = nuz_est + 1
     stop_left = nuz_left < 0
@@ -633,10 +650,8 @@ def xfe0_fast_nuz(A0, bases='', nuz_est=-1, nbs=0, nbp=0, nbs_loop=0,
             # stop, if nuz_right is larger than number of unzippable basepairs
             stop_right = stop_right or nuz_right > nuz_max
 
-    # Select nuz datapoints that are at least equally likely as
-    # `boltzmann_factor`
-    # boltzmann_factor = 1e-9
-    # mpmath.exp(-20) > 1e-9 -> corresponds to more than 20 kT difference
+    # Finally, select all nuzes that are at least equally likely as the most
+    # likely nuz times the boltzmann_factor.
     W0 = np.array(W0)
     idx_vld = W0 / w0_likely >= boltzmann_factor
 
@@ -662,7 +677,7 @@ def xfe0_fast_nuz(A0, bases='', nuz_est=-1, nbs=0, nbp=0, nbs_loop=0,
     #   force
     F0_avg = (F0 * W0).sum() / W0_sum
     #   extension of the construct
-    x_avg = ((X0_ss + X0_ds) * W0).sum() / W0_sum
+    X_avg = ((X0_ss + X0_ds) * W0).sum() / W0_sum
 
     # Automatically detect the number of unzipped bases, at which
     # the unzipping fork will fluctuate, i.e. select the
@@ -680,21 +695,21 @@ def xfe0_fast_nuz(A0, bases='', nuz_est=-1, nbs=0, nbp=0, nbs_loop=0,
     NUZ0_max = NUZ0.max()
 
     r = {
-        'x_avg': x_avg,
+        'X_avg': X_avg,
         'NUZ0': NUZ0,
-        'D0': D0,
-        'F0': F0,
-        'E0': E0,
-        'W0': W0,
-        'P0': P0,
         'NUZ0_avg': NUZ0_avg,
-        'D0_avg': D0_avg,
-        'F0_avg': F0_avg,
-        'W0_max': W0_max,
         'NUZ0_max_W0': NUZ0_max_W0,
-        'F0_max_W0': F0_max_W0,
         'NUZ0_min': NUZ0_min,
         'NUZ0_max': NUZ0_max,
+        'D0': D0,
+        'D0_avg': D0_avg,
+        'F0': F0,
+        'F0_avg': F0_avg,
+        'F0_max_W0': F0_max_W0,
+        'E0': E0,
+        'W0': W0,
+        'W0_max': W0_max,
+        'P0': P0,
         'settings': {
             'A0': A0,
             'bases': bases,
@@ -720,16 +735,16 @@ def xfe0_fast_nuz(A0, bases='', nuz_est=-1, nbs=0, nbp=0, nbs_loop=0,
     return r
 
 
-class _xfe0_fast_nuz_chained(object):
-    """Speed up calculation of xfe0_fast_nuz by taking the nuz_est from
-    previous calculation for next calculation
+class _xfe0_nuz_chained(object):
+    """Speed up calculation of xfe0_nuz by taking the nuz_est from previous
+    calculation for next calculation
 
     The object of this class is a drop in replacement for the original
-    `xfe0_fast_nuz` function, if using the the multiprocessing package.
+    `xfe0_nuz` function, if using the the multiprocessing package.
 
-    Each process gets its own copy of the a _xfe0_fast_nuz_chained object,
-    which is initialized with nuz_est = -1. Upon each call nuz_est is set to
-    the previous outcome of the calculated NUZ0_avg.
+    Each process gets its own copy of the a _xfe0_nuz_chained object, which is
+    initialized with nuz_est = -1. Upon each call nuz_est is set to the
+    previous outcome of the calculated NUZ0_avg.
     """
     def __init__(self):
         self.nuz_est = -1
@@ -744,156 +759,18 @@ class _xfe0_fast_nuz_chained(object):
         if nuz_est == -1:
             nuz_est = self.nuz_est
         # print('x0 {}, nuz_est {}'.format(x0, nuz_est))
-        r = xfe0_fast_nuz(A0, bases=bases, nuz_est=nuz_est, nbs=nbs, nbp=nbp,
-                          nbs_loop=nbs_loop,
-                          radius=radius, kappa=kappa,
-                          S=S, L_p_ssDNA=L_p_ssDNA, z=z,
-                          pitch=pitch, L_p_dsDNA=L_p_dsDNA,
-                          NNBP=NNBP, c=c, e_loop=e_loop, T=T,
-                          spacing=spacing, min_stepsize=min_stepsize,
-                          boltzmann_factor=boltzmann_factor, verbose=verbose)
+        r = xfe0_nuz(A0, bases=bases, nuz_est=nuz_est, nbs=nbs, nbp=nbp,
+                     nbs_loop=nbs_loop,
+                     radius=radius, kappa=kappa,
+                     S=S, L_p_ssDNA=L_p_ssDNA, z=z,
+                     pitch=pitch, L_p_dsDNA=L_p_dsDNA,
+                     NNBP=NNBP, c=c, e_loop=e_loop, T=T,
+                     spacing=spacing, min_stepsize=min_stepsize,
+                     boltzmann_factor=boltzmann_factor, verbose=verbose)
         self.nuz_est = int(round(r['NUZ0_avg']))
         return r
 
 
-def xfe0_all_nuz(x0, h0=0.0, bases='', nbs=0, nbp=0, nbs_loop=0,
-                 radius=0.0, kappa=0.0,
-                 S=None, L_p_ssDNA=None, z=None,
-                 pitch=None, L_p_dsDNA=None,
-                 NNBP=False, c=0, e_loop=0.0, T=298.2,
-                 boltzmann_factor=1e-9, verbose=False):
-    """
-    Calculate the equilibrium extensions, forces and energies for a given stage
-    displacement `x0` for all possible numbers of unzipped basepairs and find
-    the number of unzipped bases, at which the unzipping fork will most likely
-    fluctuate.
-
-    Parameters
-    ----------
-    bases : str
-        Sequence of sense strand of dsDNA which is (will be) unzipped
-    nbs : int
-        Number of extra ssDNA bases in the construct
-    nbp : int
-        Number of basepairs of dsDNA spacer
-    nbs_loop : int
-        Number of extra ssDNA bases in the hairpin
-    kappa : float
-        Stiffness of lever (handle) attached to DNA in N/m
-    """
-    # Maximum number of unzippabed bps
-    nuz_max = len(bases)
-
-    # If hairpin exists, add one possible unzipping event representative for
-    # opening the hairpin
-    if nbs_loop > 0:
-        nuz_max += 1
-
-    # Create a list of all possible numbers of unzipped basepairs
-    NUZ0 = np.arange(0, nuz_max+1)
-
-    # Go through all possible numbers of unzipped basepairs
-    # and calculate the equilibrium forces and energies, while
-    # ignoring the fluctuations of the extensions of the DNA
-    # and the bead in the trap
-    X0_ss = []
-    X0_ds = []
-    D0 = []
-    F0 = []
-    E0 = []
-    W0 = []
-
-    for nuz in NUZ0:
-        if nuz % 25 == 0:
-            verbose = verbose
-        else:
-            verbose = False
-        x0_ss, x0_ds, d2D, f0, e0 = \
-            equilibrium_xfe0(x0, bases=bases, nuz=nuz, nbs=nbs, nbp=nbp,
-                             nbs_loop=nbs_loop,
-                             r=radius, z0=h0, kappa=kappa,
-                             S=S, L_p_ssDNA=L_p_ssDNA, z=z,
-                             pitch=pitch, L_p_dsDNA=L_p_dsDNA, NNBP=NNBP,
-                             c=c, e_loop=e_loop, T=T, verbose=verbose)
-        X0_ss.append(x0_ss)
-        X0_ds.append(x0_ds)
-        D0.append(d2D)
-        F0.append(f0)
-        E0.append(e0)
-        W0.append(mpmath.exp(- e0 / (kB*T)))
-
-    X0_ss = np.array(X0_ss)
-    X0_ds = np.array(X0_ds)
-    D0 = np.array(D0)
-    F0 = np.array(F0)
-    E0 = np.array(E0)
-    W0 = np.array(W0)
-
-    # Calculate weighted averages of:
-    W0_sum = W0.sum()
-    P0 = W0 / W0_sum
-    #   unzipped basepairs
-    NUZ0_avg = (NUZ0 * W0).sum() / W0_sum
-    #   bead displacements
-    D0_avg = (D0 * W0[np.newaxis].T).sum(axis=0) / W0_sum
-    #   force
-    F0_avg = (F0 * W0).sum() / W0_sum
-    #   extension of the construct
-    x = ((X0_ss + X0_ds) * W0).sum() / W0_sum
-
-    # Automatically detect the number of unzipped bases, at which
-    # the unzipping fork will fluctuate, i.e. select the
-    # number of basepairs which have significant weights (weights
-    # with a minimum probability compared to the largest weight).
-    # Calculate later used variables.
-    idx_max = W0.argmax()
-    NUZ0_max_W0 = NUZ0[idx_max]
-    F0_max_W0 = F0[idx_max]
-    W0_max = W0[idx_max]
-
-    # boltzmann_factor = 1e-9
-    # mpmath.exp(-20) > 1e-9 -> corresponds to more than 20 kT difference
-    NUZ0_min = NUZ0[W0 / W0_max >= boltzmann_factor].min()
-    NUZ0_max = NUZ0[W0 / W0_max >= boltzmann_factor].max()
-
-    r = {
-        'x': x,
-        'x0': x0,
-        'NUZ0': NUZ0,
-        'D0': D0,
-        'F0': F0,
-        'E0': E0,
-        'W0': W0,
-        'P0': P0,
-        'NUZ0_avg': NUZ0_avg,
-        'D0_avg': D0_avg,
-        'F0_avg': F0_avg,
-        'W0_max': W0_max,
-        'NUZ0_max_W0': NUZ0_max_W0,
-        'F0_max_W0': F0_max_W0,
-        'NUZ0_min': NUZ0_min,
-        'NUZ0_max': NUZ0_max,
-        'settings': {
-            'h0': h0,
-            'bases': bases,
-            'nbs': nbs,
-            'nbp': nbp,
-            'nbs_loop': nbs_loop,
-            'radius': radius,
-            'kappa': kappa,
-            'S': S,
-            'L_p_ssDNA': L_p_ssDNA,
-            'z': z,
-            'pitch': pitch,
-            'L_p_dsDNA': L_p_dsDNA,
-            'NNBP': NNBP,
-            'c': c,
-            'e_loop': e_loop,
-            'T': T,
-            'boltzmann_factor': boltzmann_factor
-        }
-    }
-    return r
 
 
 def approx_eq_nuz(A0, bases='', nbs=0, nbp=0,
@@ -2144,27 +2021,17 @@ def plot_unzip_energy(x0, y0=0.0, h0=0.0, bases='', nuz_est=-1, nbs=0,
                       NNBP=False, c=0, e_loop=0.0, T=298.2,
                       spacing=5, min_stepsize=10,
                       boltzmann_factor=1e-9,
-                      verbose=False, compatibility=False, axes=None):
-    if compatibility:
-        xfe0 = xfe0_all_nuz(x0, h0=h0, bases=bases, nbs=nbs, nbp=nbp,
-                            nbs_loop=nbs_loop,
-                            radius=radius, kappa=kappa,
-                            S=S, L_p_ssDNA=L_p_ssDNA, z=z,
-                            pitch=pitch, L_p_dsDNA=L_p_dsDNA,
-                            NNBP=NNBP, c=c, e_loop=e_loop, T=T,
-                            boltzmann_factor=boltzmann_factor,
-                            verbose=verbose)
-    else:
-        A0 = attachment_point(x0, y0=y0, h0=h0, radius=radius)
-        xfe0 = xfe0_fast_nuz(A0, bases=bases, nuz_est=nuz_est, nbs=nbs,
-                             nbp=nbp, nbs_loop=nbs_loop,
-                             radius=radius, kappa=kappa,
-                             S=S, L_p_ssDNA=L_p_ssDNA, z=z,
-                             pitch=pitch, L_p_dsDNA=L_p_dsDNA,
-                             NNBP=NNBP, c=c, e_loop=e_loop, T=T,
-                             spacing=spacing, min_stepsize=min_stepsize,
-                             boltzmann_factor=boltzmann_factor,
-                             verbose=verbose)
+                      verbose=False, axes=None):
+    A0 = attachment_point(x0, y0=y0, h0=h0, radius=radius)
+    xfe0 = xfe0_nuz(A0, bases=bases, nuz_est=nuz_est, nbs=nbs, nbp=nbp,
+                    nbs_loop=nbs_loop,
+                    radius=radius, kappa=kappa,
+                    S=S, L_p_ssDNA=L_p_ssDNA, z=z,
+                    pitch=pitch, L_p_dsDNA=L_p_dsDNA,
+                    NNBP=NNBP, c=c, e_loop=e_loop, T=T,
+                    spacing=spacing, min_stepsize=min_stepsize,
+                    boltzmann_factor=boltzmann_factor,
+                    verbose=verbose)
 
     # with cnps.cn_plot('notebook') as cnp:
     if axes is None:
