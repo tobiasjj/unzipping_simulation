@@ -2184,8 +2184,8 @@ def get_energies(simulation, displacement=None, force=None, nuz=None):
     if displacement is None or force is None or nuz is None:
         sim_values = get_simulation_values(simulation, fe_xyz=True)
     D = sim_values['displacementXYZ'] if displacement is None else displacement
-    F = sim_values['force'].astype(float) if force is None else force
-    NUZ = sim_values['nuz'].astype(float) if nuz is None else nuz
+    F = sim_values['force'] if force is None else force
+    NUZ = sim_values['nuz'] if nuz is None else nuz
     NBS = simulation['settings']['nbs'] + NUZ * 2
 
     E_EXT_SSDNA = []
@@ -2207,10 +2207,10 @@ def get_energies(simulation, displacement=None, force=None, nuz=None):
         E_LEV.append(e_lev)
 
     energies = {
-        'e_ext_ssDNA': np.array(E_EXT_SSDNA).astype(float),
-        'e_ext_dsDNA': np.array(E_EXT_DSDNA).astype(float),
-        'e_unzip_DNA': np.array(E_UNZIP_DNA).astype(float),
-        'e_lev': np.array(E_LEV).astype(float)
+        'e_ext_ssDNA': np.array(E_EXT_SSDNA),
+        'e_ext_dsDNA': np.array(E_EXT_DSDNA),
+        'e_unzip_DNA': np.array(E_UNZIP_DNA),
+        'e_lev': np.array(E_LEV)
     }
 
     return energies
