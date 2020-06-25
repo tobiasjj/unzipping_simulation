@@ -262,6 +262,7 @@ _DS_pair = {
     'TA': 25.06*cal/Na
 }
 
+
 def get_unzipping_simulation(simulation_settings_file, simulations_dir=None,
                              simulation_file=None, read=True, save=True,
                              **kwargs):
@@ -597,7 +598,7 @@ def xfe0_nuz(A0, bases='', nuz_est=-1, nbs=0, nbp=0, nbs_loop=0,
     W0 = []
 
     def eq_few0(nuz, w0_likely):
-        x0_ss, x0_ds, d, f0, e0 = \
+        x0_ss, x0_ds, d0, f0, e0 = \
             equilibrium_xfe0(A0, bases=bases, nuz=nuz, nbs=nbs, nbp=nbp,
                              nbs_loop=nbs_loop,
                              radius=radius, kappa=kappa,
@@ -608,7 +609,7 @@ def xfe0_nuz(A0, bases='', nuz_est=-1, nbs=0, nbp=0, nbs_loop=0,
         NUZ0.append(nuz)
         X0_ss.append(x0_ss)
         X0_ds.append(x0_ds)
-        D0.append(d)
+        D0.append(d0)
         F0.append(f0)
         E0.append(e0)
         w0 = mpmath.exp(- e0 / (kB*T))
@@ -757,8 +758,6 @@ class _xfe0_nuz_chained(object):
         return r
 
 
-
-
 def approx_eq_nuz(A0, bases='', nbs=0, nbp=0,
                   radius=0.0, kappa=None,
                   S=None, L_p_ssDNA=None, z=None,
@@ -864,40 +863,41 @@ def equilibrium_xfe0(A0, bases='', nuz=0, nbs=0, nbp=0, nbs_loop=0,
         Number of unzipped basepairs
     nbs : int
         Number of extra ssDNA bases in the construct
-    nbp
+    nbp : int
         Number of basepairs of dsDNA spacer
     nbs_loop : int
         Number of extra ssDNA bases in the hairpin
     radius : float
         Radius of the bead (m).
-a : np.ndarray of type float
+    kappa : np.ndarray of type float
         Stiffness for [x, y, z] of lever (handle) attached to DNA in N/m.
     """
     # One unzipped basepair leads to 2 free ssDNA bases
     nbs = 2*nuz + nbs
 
-    # If unzipping fork has reached the last basepair and end loop of unzipping
-    # construct should be unzipped, elongates the ssDNA by nbs_loop bases
+    # If unzipping fork has reached the last basepair and the end loop of the
+    # unzipping construct should be unzipped, elongate the ssDNA by nbs_loop
+    # bases
     if nbs_loop > 0 and nuz >= len(bases) + 1:
         nbs += nbs_loop
 
     # Calculate most probable force for
     #   number of unzipped bases nbs and
     #   number of basepairs nbp and
-    #   stage displacement x0
-    f0, d = F_0(A0, nbs=nbs, S=S, L_p_ssDNA=L_p_ssDNA, z=z, T=T,
-                nbp=nbp, pitch=pitch, L_p_dsDNA=L_p_dsDNA,
-                radius=radius, kappa=kappa,
-                verbose=verbose)
+    #   stage displacement x0 = A0[0]
+    f0, d0 = F_0(A0, nbs=nbs, S=S, L_p_ssDNA=L_p_ssDNA, z=z, T=T,
+                 nbp=nbp, pitch=pitch, L_p_dsDNA=L_p_dsDNA,
+                 radius=radius, kappa=kappa,
+                 verbose=verbose)
 
     # Calculate most probable extension for most probable force for
     #   both of the two ssDNA strands and
     #   one dsDNA strand for
-    #   number of unzipped base pairs j
+    #   number of unzipped base pairs nuz
     x0_ss = ext_ssDNA(f0, nbs=nbs, S=S, L_p=L_p_ssDNA, z=z, T=T)
     x0_ds = ext_dsDNA_wlc(f0, nbp=nbp, pitch=pitch, L_p=L_p_dsDNA, T=T)
     e0 = E_tot(bases=bases, nuz=nuz, nbs=nbs, x_ss=x0_ss, nbp=nbp, x_ds=x0_ds,
-               d=d, kappa=kappa,
+               displacement=d0, kappa=kappa,
                S=S, L_p_ssDNA=L_p_ssDNA, z=z,
                pitch=pitch, L_p_dsDNA=L_p_dsDNA,
                NNBP=NNBP, c=c, e_loop=e_loop, T=T, verbose=verbose)
@@ -906,7 +906,7 @@ a : np.ndarray of type float
         template = "nuz: {:03d}, f0: {:.3e}, e0: {:.3e}"
         print(template.format(nuz, f0, e0))
 
-    return x0_ss, x0_ds, d, f0, e0
+    return x0_ss, x0_ds, d0, f0, e0
 
 
 def F_0(A0, nbs=0, S=None, L_p_ssDNA=None, z=None, T=298.2,
@@ -1864,7 +1864,7 @@ def E_ext_dsDNA_wlc(x, nbp=0, pitch=None, L_p=None, T=298.2):
     return integral(x) - integral(0)
 
 
-def E_lev(d, kappa):
+def E_lev(displacement, kappa):
     """
     The elastic energy of the lever/handle.
 
@@ -1872,14 +1872,14 @@ def E_lev(d, kappa):
     ----------
     kappa : float
         Stiffness of lever in N/m
-    d : float
+    displacement : float
         Displacement of lever in m
     """
-    return 1/2 * kappa * d*d
+    return 1/2 * kappa * displacement**2
 
 
 def E_tot(bases='', nuz=0, nbs=0, x_ss=0.0, nbp=0, x_ds=0.0,
-          d=0.0, kappa=0.0,
+          displacement=0.0, kappa=0.0,
           S=None, L_p_ssDNA=None, z=None,
           pitch=None, L_p_dsDNA=None,
           NNBP=False, c=None, e_loop=0.0, T=298.2, verbose=False):
@@ -1908,7 +1908,7 @@ def E_tot(bases='', nuz=0, nbs=0, x_ss=0.0, nbp=0, x_ds=0.0,
     e_ext_dsDNA = E_ext_dsDNA_wlc(x_ds, nbp=nbp, pitch=pitch, L_p=L_p_dsDNA,
                                   T=T)
     e_unzip_DNA = E_unzip_DNA(bases, nuz=nuz, NNBP=NNBP, c=c, T=T)
-    e_lev = np.sum(E_lev(d, kappa))
+    e_lev = np.sum(E_lev(displacement, kappa))
 
     # Include proper energy term for opening the terminal hairpin, only if all
     # bps are already unzipped and hairpin is to be opened
@@ -1917,13 +1917,7 @@ def E_tot(bases='', nuz=0, nbs=0, x_ss=0.0, nbp=0, x_ds=0.0,
     else:
         e_loop = 0.0
 
-    e_total = (
-        e_ext_ssDNA
-        + e_ext_dsDNA
-        + e_unzip_DNA
-        + e_lev
-        + e_loop
-    )
+    e_total = e_ext_ssDNA + e_ext_dsDNA + e_unzip_DNA + e_lev + e_loop
 
     if verbose:
         print('E_ext_ssDNA: ' + str(e_ext_ssDNA/(kB*T)))
@@ -2105,6 +2099,47 @@ def get_simulation_values(simulation):
     }
 
     return return_value
+
+
+def get_weighted_energies(simulation):
+    """
+    Get weighted and averaged energies from simulation
+
+    Parameters
+    ----------
+    simulation : dict
+        The simulation to get the weighted averaged energies from.
+
+    Returns
+    -------
+    dict
+        Weighted and averaged energies for ssDNA and dsDNA extension,
+        lever/handle displacement, and basepair unzipping.
+    """
+    E0s_avg = {
+        'e_ext_ssDNA': [],
+        'e_ext_dsDNA': [],
+        'e_unzip_DNA': [],
+        'e_lev': []
+    }
+
+    # Get all unweighted energies for each simulation point and
+    # calculate the averaged weighted energies
+    for XFE0 in simulation['XFE0']:
+        D0 = XFE0['D0']
+        F0 = XFE0['F0']
+        NUZ0 = XFE0['NUZ0']
+        W0 = XFE0['W0']
+        W0_sum = W0.sum()
+        E0s = get_energies(simulation, D0, F0, NUZ0)
+        for key, E0 in E0s.items():
+            E0s_avg[key].append(np.sum(E0 * W0) / W0_sum)
+
+    # Convert lists to arrays
+    for key, E0_avg in E0s_avg.items():
+        E0s_avg[key] = np.array(E0_avg)
+
+    return E0s_avg
 
 
 def get_energies(simulation, displacement=None, force=None, nuz=None):
