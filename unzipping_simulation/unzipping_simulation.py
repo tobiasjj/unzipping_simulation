@@ -2071,21 +2071,20 @@ def get_simulation_values(simulation, fe_xyz=False, weighted_energies=False,
         # Old simulation object with different key
         EX_avg = XFE['X']
 
-    # Averaged force acting on the microsphere
-    F0XYZ_avg = XFE['F0_avg']
-    F0_avg = np.sqrt(np.sum(np.power(F0XYZ_avg, 2), axis=1))
-
     # Select data which was properly fitted
     idx_valid = (EX_avg != 0)
 
     return_value = {
         'extension': EX_avg[idx_valid],
-        'force': F0_avg[idx_valid],
+        'force': XFE['F0_avg'][idx_valid],
         'nuz': XFE['NUZ0_avg'][idx_valid]
     }
     if fe_xyz:
-        return_value['displacementXYZ'] = XFE['D0_avg'][idx_valid]
-        return_value['forceXYZ'] = F0XYZ_avg[idx_valid]
+        kappa = XFE['settings']['kappa']
+        D0XYZ_avg = XFE['D0_avg'][idx_valid]
+        F0XYZ_avg = kappa * D0XYZ_avg
+        return_value['displacementXYZ'] = D0XYZ_avg
+        return_value['forceXYZ'] = F0XYZ_avg
     if weighted_energies:
         E0s_avg = get_weighted_energies(simulation)
         for key, E0_avg in E0s_avg.items():
