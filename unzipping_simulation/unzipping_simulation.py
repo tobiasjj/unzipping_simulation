@@ -2081,7 +2081,11 @@ def get_simulation_values(simulation, fe_xyz=False, weighted_energies=False,
     }
     if fe_xyz:
         kappa = XFE['settings']['kappa']
-        D0XYZ_avg = XFE['D0_avg'][idx_valid]
+        try:
+            D0XYZ_avg = XFE['D0_avg'][idx_valid]
+        except KeyError:
+            # Old simulation object
+            D0XYZ_avg =  np.array([xfe0['D0_avg'] for xfe0 in XFE0])
         F0XYZ_avg = kappa * D0XYZ_avg
         return_value['displacementXYZ'] = D0XYZ_avg
         return_value['forceXYZ'] = F0XYZ_avg
