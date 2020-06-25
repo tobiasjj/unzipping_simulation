@@ -51,9 +51,9 @@ boltzmann_factor = simulation['settings']['boltzmann_factor']
 XFE, XFE0 = simulation['XFE'], simulation['XFE0']
 
 # extension, number of unzipped basepairs, force extension of the construct
-X = XFE['X']
+X = XFE['EX_avg']
 # 3D position of the stage
-X0 = XFE['A0'][:,0]
+X0 = XFE['X0']
 # average number of unzipped basepairs
 NUZ0_avg = XFE['NUZ0_avg']
 # most probable number of unzipped basepairs
@@ -453,8 +453,8 @@ def unzipping_force_energy(x0_min, x0_max, y0=0.0, h0=0.0, resolution=1e-9,
 
     # combine all individually simulated points into one array
     XFE = {
-        'X': np.array([xfe0['X_avg'] for xfe0 in XFE0]),
         'X0': np.array([xfe0['settings']['A0'][0] for xfe0 in XFE0]),
+        'EX_avg': np.array([xfe0['EX_avg'] for xfe0 in XFE0]),
         'NUZ0_avg': np.array([xfe0['NUZ0_avg'] for xfe0 in XFE0]),
         'NUZ0_max_W0': np.array([xfe0['NUZ0_max_W0'] for xfe0 in XFE0]),
         'D0_avg': np.array([xfe0['D0_avg'] for xfe0 in XFE0]),
@@ -590,15 +590,15 @@ def xfe0_nuz(A0, bases='', nuz_est=-1, nbs=0, nbp=0, nbs_loop=0,
     # energy, and weight for a given number of unzipped basepairs and define
     # variables to be filled upon calculation.
     NUZ0 = []
-    X0_ss = []
-    X0_ds = []
+    EX_ss = []
+    EX_ds = []
     D0 = []
     F0 = []
     E0 = []
     W0 = []
 
     def eq_few0(nuz, w0_likely):
-        x0_ss, x0_ds, d0, f0, e0 = \
+        ex_ss, ex_ds, d0, f0, e0 = \
             equilibrium_xfe0(A0, bases=bases, nuz=nuz, nbs=nbs, nbp=nbp,
                              nbs_loop=nbs_loop,
                              radius=radius, kappa=kappa,
@@ -607,8 +607,8 @@ def xfe0_nuz(A0, bases='', nuz_est=-1, nbs=0, nbp=0, nbs_loop=0,
                              NNBP=NNBP, c=c, e_loop=e_loop, T=T,
                              verbose=verbose)
         NUZ0.append(nuz)
-        X0_ss.append(x0_ss)
-        X0_ds.append(x0_ds)
+        EX_ss.append(ex_ss)
+        EX_ds.append(ex_ds)
         D0.append(d0)
         F0.append(f0)
         E0.append(e0)
@@ -662,8 +662,8 @@ def xfe0_nuz(A0, bases='', nuz_est=-1, nbs=0, nbp=0, nbs_loop=0,
     NUZ0 = np.array(NUZ0)[idx_vld]
     idx_srt = np.argsort(NUZ0)
     NUZ0 = NUZ0[idx_srt]
-    X0_ss = np.array(X0_ss)[idx_vld][idx_srt]
-    X0_ds = np.array(X0_ds)[idx_vld][idx_srt]
+    EX_ss = np.array(EX_ss)[idx_vld][idx_srt]
+    EX_ds = np.array(EX_ds)[idx_vld][idx_srt]
     D0 = np.array(D0)[idx_vld][idx_srt]
     F0 = np.array(F0)[idx_vld][idx_srt]
     E0 = np.array(E0)[idx_vld][idx_srt]
@@ -676,7 +676,7 @@ def xfe0_nuz(A0, bases='', nuz_est=-1, nbs=0, nbp=0, nbs_loop=0,
     NUZ0_avg = (NUZ0 * W0).sum() / W0_sum
     D0_avg = (D0 * W0[np.newaxis].T).sum(axis=0) / W0_sum
     F0_avg = (F0 * W0).sum() / W0_sum
-    X_avg = ((X0_ss + X0_ds) * W0).sum() / W0_sum
+    EX_avg = ((EX_ss + EX_ds) * W0).sum() / W0_sum
 
     # Select values of most likely state
     idx_max = W0.argmax()
@@ -685,7 +685,7 @@ def xfe0_nuz(A0, bases='', nuz_est=-1, nbs=0, nbp=0, nbs_loop=0,
     W0_max = W0[idx_max]
 
     r = {
-        'X_avg': X_avg,
+        'EX_avg': EX_avg,
         'NUZ0': NUZ0,
         'NUZ0_avg': NUZ0_avg,
         'NUZ0_max_W0': NUZ0_max_W0,
@@ -894,9 +894,10 @@ def equilibrium_xfe0(A0, bases='', nuz=0, nbs=0, nbp=0, nbs_loop=0,
     #   both of the two ssDNA strands and
     #   one dsDNA strand for
     #   number of unzipped base pairs nuz
-    x0_ss = ext_ssDNA(f0, nbs=nbs, S=S, L_p=L_p_ssDNA, z=z, T=T)
-    x0_ds = ext_dsDNA_wlc(f0, nbp=nbp, pitch=pitch, L_p=L_p_dsDNA, T=T)
-    e0 = E_tot(bases=bases, nuz=nuz, nbs=nbs, x_ss=x0_ss, nbp=nbp, x_ds=x0_ds,
+    ex_ss = ext_ssDNA(f0, nbs=nbs, S=S, L_p=L_p_ssDNA, z=z, T=T)
+    ex_ds = ext_dsDNA_wlc(f0, nbp=nbp, pitch=pitch, L_p=L_p_dsDNA, T=T)
+    e0 = E_tot(bases=bases, nuz=nuz, nbs=nbs, ex_ss=ex_ss,
+               nbp=nbp, ex_ds=ex_ds,
                displacement=d0, kappa=kappa,
                S=S, L_p_ssDNA=L_p_ssDNA, z=z,
                pitch=pitch, L_p_dsDNA=L_p_dsDNA,
@@ -906,7 +907,7 @@ def equilibrium_xfe0(A0, bases='', nuz=0, nbs=0, nbp=0, nbs_loop=0,
         template = "nuz: {:03d}, f0: {:.3e}, e0: {:.3e}"
         print(template.format(nuz, f0, e0))
 
-    return x0_ss, x0_ds, d0, f0, e0
+    return ex_ss, ex_ds, d0, f0, e0
 
 
 def F_0(A0, nbs=0, S=None, L_p_ssDNA=None, z=None, T=298.2,
@@ -937,17 +938,18 @@ def F_0(A0, nbs=0, S=None, L_p_ssDNA=None, z=None, T=298.2,
     """
     # Find the equilibrium force f at given nuz and A0
     def f_lev_cost(f, return_d=False):
-        x_ss = ext_ssDNA(f, nbs=nbs, S=S, L_p=L_p_ssDNA, z=z, T=T)
-        x_ds = ext_dsDNA_wlc(f, nbp=nbp, pitch=pitch, L_p=L_p_dsDNA, T=T)
+        ex_ss = ext_ssDNA(f, nbs=nbs, S=S, L_p=L_p_ssDNA, z=z, T=T)
+        ex_ds = ext_dsDNA_wlc(f, nbp=nbp, pitch=pitch, L_p=L_p_dsDNA, T=T)
         if A0[1] == 0.0 and len(kappa) == 2:
             # Simulate in 2D only (3x as fast as 3D)
             x0 = A0[0]
             z0 = - A0[2] - radius
-            f_construct, d = F_construct_2D(x0, z0=z0, x_ss=x_ss, x_ds=x_ds,
+            f_construct, d = F_construct_2D(x0, z0=z0,
+                                            ex_ss=ex_ss, ex_ds=ex_ds,
                                             radius=radius, kappa=kappa)
         else:
             # Simulate in 3D
-            f_construct, d = F_construct_3D(A0, x_ss=x_ss, x_ds=x_ds, f_dna=f,
+            f_construct, d = F_construct_3D(A0, ex_ss=ex_ss, ex_ds=ex_ds, f_dna=f,
                                             radius=radius, kappa=kappa,
                                             verbose=verbose)
         if return_d:
@@ -1219,7 +1221,7 @@ def F_dsDNA_wlc(x, nbp=0, pitch=None, L_p=None, T=298.2):
     return F * sign
 
 
-def F_construct_2D(x0, z0=0.0, x_ss=0.0, x_ds=0.0, radius=0.0, kappa=0.0,
+def F_construct_2D(x0, z0=0.0, ex_ss=0.0, ex_ds=0.0, radius=0.0, kappa=0.0,
                    xtol=1e-18):
     """
     Parameters
@@ -1230,9 +1232,9 @@ def F_construct_2D(x0, z0=0.0, x_ss=0.0, x_ds=0.0, radius=0.0, kappa=0.0,
         Distance of the bead surface to the glass surface, if
         the bead is in its resting position, i.e. no force in
         the vertical direction is applied (m).
-    x_ss : float
+    ex_ss : float
         Extension of ssDNA (m)
-    x_ds : float
+    ex_ds : float
         Extension of dsDNA (m)
     radius : float
         Radius of the bead/handle (m)
@@ -1244,14 +1246,14 @@ def F_construct_2D(x0, z0=0.0, x_ss=0.0, x_ds=0.0, radius=0.0, kappa=0.0,
     # Pythagoras:
     #   a is horizontal distance of attachment point to the center of the bead
     #   b is vertical distance of the surface to the center of the bead
-    #   c is extension of the construct (x_ss + x_ds) plus the bead radius (r)
+    #   c is extension of the construct (ex_ss + ex_ds) plus the bead radius (r)
     #   dx is the horizontal displacement of the bead (x or y)
     #   dz is the vertical displacement of the bead (z)
     r = radius
     z0_r = z0 + r
     # a = x0 - dx
     # b = z0_r - dz
-    c = x_ss + x_ds + r
+    c = ex_ss + ex_ds + r
     # a**2 + b**2 = c**2
     # ->
     # (x0 - dx)**2 + (z0_r - dz)**2 = c**2
@@ -1264,7 +1266,7 @@ def F_construct_2D(x0, z0=0.0, x_ss=0.0, x_ds=0.0, radius=0.0, kappa=0.0,
         return 0.0, (0.0, 0.0)
 
     # If z0 is 0 or the stiffness of z is 0 bead will always
-    # touch the surface and dx only depends on x0, x_ss, x_ds, and r.
+    # touch the surface and dx only depends on x0, ex_ss, ex_ds, and r.
     if z0 == 0 or isinstance(kappa, float):
         if not isinstance(kappa, float):
             kappa = kappa[0]
@@ -1344,7 +1346,7 @@ def F_construct_2D(x0, z0=0.0, x_ss=0.0, x_ds=0.0, radius=0.0, kappa=0.0,
     return fxz, (dx, _dz(dx))
 
 
-def F_construct_3D(A0, x_ss=0.0, x_ds=0.0, f_dna=0.0, radius=0.0, kappa=None,
+def F_construct_3D(A0, ex_ss=0.0, ex_ds=0.0, f_dna=0.0, radius=0.0, kappa=None,
                    factr=1e5, gtol=1e-5, eps_angle=1e-8,
                    verbose=False, deep_verbose=False, print_result=False,
                    return_plus=False):
@@ -1357,13 +1359,13 @@ def F_construct_3D(A0, x_ss=0.0, x_ds=0.0, f_dna=0.0, radius=0.0, kappa=None,
     A0 : np.ndarray of type float
         Position (m) of the DNA attachment point on the glass surface relative
         to the trap center: [x, y, z].
-    x_ss : float
+    ex_ss : float
         Extension of ssDNA (m).
-    x_ds : float
+    ex_ds : float
         Extension of dsDNA (m).
     f_dna : float
         Force (N) acting on the DNA construct that corresponds to the
-        extensions `x_ss` and `x_ds`.
+        extensions `ex_ss` and `ex_ds`.
     radius : float
         Radius of the bead/handle (m)
     kappa : np.ndarray of type float
@@ -1398,7 +1400,7 @@ def F_construct_3D(A0, x_ss=0.0, x_ds=0.0, f_dna=0.0, radius=0.0, kappa=None,
         kappa = np.array([0, 0, 0])
 
     # Length of the DNA construct
-    l_dna = x_ss + x_ds
+    l_dna = ex_ss + ex_ds
 
     # Initial distance of DNA attachment point on the glass surface to the bead
     # center, i.e. the length of the DNA/bead construct
@@ -1878,7 +1880,7 @@ def E_lev(displacement, kappa):
     return 1/2 * kappa * displacement**2
 
 
-def E_tot(bases='', nuz=0, nbs=0, x_ss=0.0, nbp=0, x_ds=0.0,
+def E_tot(bases='', nuz=0, nbs=0, ex_ss=0.0, nbp=0, ex_ds=0.0,
           displacement=0.0, kappa=0.0,
           S=None, L_p_ssDNA=None, z=None,
           pitch=None, L_p_dsDNA=None,
@@ -1892,11 +1894,11 @@ def E_tot(bases='', nuz=0, nbs=0, x_ss=0.0, nbp=0, x_ds=0.0,
         Number of unzipped basepairs to calculate the unzip energy.
     nbs : int
         Number of ssDNA bases
-    x_ss : float
+    ex_ss : float
         Extension of an ssDNA strand
     nbp : int
         Number of basepairs of the spacer dsDNA
-    x_ds : float
+    ex_ds : float
         Extension of the spacer dsDNA
     kappa : float
         Stiffness of lever (handle) attached to DNA in N/m
@@ -1904,8 +1906,8 @@ def E_tot(bases='', nuz=0, nbs=0, x_ss=0.0, nbp=0, x_ds=0.0,
         Free energy for opening the last bp and terminal hairpin (kcal/mol).
     """
 
-    e_ext_ssDNA = E_ext_ssDNA(x_ss, nbs=nbs, S=S, L_p=L_p_ssDNA, z=z, T=T)
-    e_ext_dsDNA = E_ext_dsDNA_wlc(x_ds, nbp=nbp, pitch=pitch, L_p=L_p_dsDNA,
+    e_ext_ssDNA = E_ext_ssDNA(ex_ss, nbs=nbs, S=S, L_p=L_p_ssDNA, z=z, T=T)
+    e_ext_dsDNA = E_ext_dsDNA_wlc(ex_ds, nbp=nbp, pitch=pitch, L_p=L_p_dsDNA,
                                   T=T)
     e_unzip_DNA = E_unzip_DNA(bases, nuz=nuz, NNBP=NNBP, c=c, T=T)
     e_lev = np.sum(E_lev(displacement, kappa))
@@ -1931,10 +1933,11 @@ def E_tot(bases='', nuz=0, nbs=0, x_ss=0.0, nbp=0, x_ds=0.0,
 def plot_simulated_force_extension(simulation, x=None, y=None, yXYZ=None,
                                    axes=None, ylim=None, theta=False):
     # Get data to be plotted
-    sim_values = get_simulation_values(simulation)
+    sim_values = get_simulation_values(simulation, fe_xyz=True,
+                                       weighted_energies=False, theta=True),
     e = sim_values['extension']
     f = sim_values['force']
-    fXYZ = sim_values['fXYZ']
+    forceXYZ = sim_values['forceXYZ']
     nuz = sim_values['nuz']
     th = sim_values['theta']
 
@@ -1973,7 +1976,7 @@ def plot_simulated_force_extension(simulation, x=None, y=None, yXYZ=None,
         ax2.xaxis.set_visible(False)
 
     # Plot simulated unzipping curves
-    ax.plot(e * 1e9, fXYZ * 1e12)
+    ax.plot(e * 1e9, forceXYZ * 1e12)
 
     # Plot measured unzipping curves
     if x is not None and yXYZ is not None:
@@ -2052,51 +2055,47 @@ def plot_unzip_energy(x0, y0=0.0, h0=0.0, bases='', nuz_est=-1, nbs=0, nbp=0,
     return fig, ax, ax2
 
 
-def get_simulation_values(simulation):
+def get_simulation_values(simulation, fe_xyz=False, weighted_energies=False,
+                          theta=False):
     """
     Get extension, force, and number of unzipped basepairs of a simulation.
     """
     # Set variables of simulated data
     XFE, XFE0 = simulation['XFE'], simulation['XFE0']
-    kappa = simulation['settings']['kappa']
 
     # Get extension, force, and number of unzipped basepairs ...
     # Extension of the construct
-    X = XFE['X']
-
-    # Apparent extension (taking into consideration rotation of bead)
     try:
-        EXT_APP_avg = XFE['EXT_APP_avg']
+        EX_avg = XFE['EX_avg']
     except KeyError:
-        # Fallback to extension of the construct
-        EXT_APP_avg = X
+        # Old simulation object with different key
+        EX_avg = XFE['X']
 
-    # Averaged displacement and force acting on the microsphere
-    D0XYZ_avg = np.array([xfe0['D0_avg'] for xfe0 in XFE0])
-    F0XYZ_avg = D0XYZ_avg * kappa
-    F0d_avg = np.sqrt(np.sum(np.power(F0XYZ_avg, 2), axis=1))
-    # should be the same as:
-    # F0d_avg = np.array([(np.sqrt(((xfe0['D0'] * kappa)**2).sum(axis=1))
-    #                * xfe0['W0'] / xfe0['W0'].sum()).sum() for xfe0 in XFE0])
-
-    # Average number of unzipped basepairs
-    NUZ0_avg = XFE['NUZ0_avg']
+    # Averaged force acting on the microsphere
+    F0XYZ_avg = XFE['F0_avg']
+    F0_avg = np.sqrt(np.sum(np.power(F0XYZ_avg, 2), axis=1))
 
     # Select data which was properly fitted
-    try:
-        THETA_DIFF = XFE['DA0_avg'][:,0]
-    except KeyError:
-        THETA_DIFF = np.zeros_like(X)
-    idx_valid = (X != 0)
+    idx_valid = (EX_avg != 0)
 
     return_value = {
-        'extension': EXT_APP_avg[idx_valid],
-        'dXYZ': D0XYZ_avg[idx_valid],
-        'fXYZ': F0XYZ_avg[idx_valid],
-        'force': F0d_avg[idx_valid],
-        'nuz': NUZ0_avg[idx_valid],
-        'theta': THETA_DIFF[idx_valid]
+        'extension': EX_avg[idx_valid],
+        'force': F0_avg[idx_valid],
+        'nuz': XFE['NUZ0_avg'][idx_valid]
     }
+    if fe_xyz:
+        return_value['displacementXYZ'] = XFE['D0_avg'][idx_valid]
+        return_value['forceXYZ'] = F0XYZ_avg[idx_valid]
+    if weighted_energies:
+        E0s_avg = get_weighted_energies(simulation)
+        for key, E0_avg in E0s_avg.items():
+            return_value[key] = E0_avg[idx_valid]
+    if theta:
+        try:
+            THETA_DIFF = XFE['DA0_avg'][:,0]
+        except KeyError:
+            THETA_DIFF = np.zeros_like(EX_avg)
+        return_value['theta'] = THETA_DIFF[idx_valid]
 
     return return_value
 
@@ -2180,9 +2179,9 @@ def get_energies(simulation, displacement=None, force=None, nuz=None):
 
     # Calculate all NUZs and NBSs
     if displacement is None or force is None or nuz is None:
-        sim_values = get_simulation_values(simulation)
-    D = sim_values['dXYZ'] if displacement is None else displacement
-    F0 = sim_values['force'].astype(float) if force is None else force
+        sim_values = get_simulation_values(simulation, fe_xyz=True)
+    D = sim_values['displacementXYZ'] if displacement is None else displacement
+    F = sim_values['force'].astype(float) if force is None else force
     NUZ = sim_values['nuz'].astype(float) if nuz is None else nuz
     NBS = simulation['settings']['nbs'] + NUZ * 2
 
@@ -2190,11 +2189,11 @@ def get_energies(simulation, displacement=None, force=None, nuz=None):
     E_EXT_DSDNA = []
     E_UNZIP_DNA = []
     E_LEV = []
-    for d, f, nuz, nbs in zip(D, F0, NUZ, NBS):
-        x_ss = ext_ssDNA(f, nbs=nbs, S=S, L_p=L_p_ssDNA, z=z, T=T)
-        x_ds = ext_dsDNA_wlc(f, nbp=nbp, pitch=pitch, L_p=L_p_dsDNA, T=T)
-        e_ext_ssDNA = E_ext_ssDNA(x_ss, nbs=nbs, S=S, L_p=L_p_ssDNA, z=z, T=T)
-        e_ext_dsDNA = E_ext_dsDNA_wlc(x_ds, nbp=nbp, pitch=pitch,
+    for d, f, nuz, nbs in zip(D, F, NUZ, NBS):
+        ex_ss = ext_ssDNA(f, nbs=nbs, S=S, L_p=L_p_ssDNA, z=z, T=T)
+        ex_ds = ext_dsDNA_wlc(f, nbp=nbp, pitch=pitch, L_p=L_p_dsDNA, T=T)
+        e_ext_ssDNA = E_ext_ssDNA(ex_ss, nbs=nbs, S=S, L_p=L_p_ssDNA, z=z, T=T)
+        e_ext_dsDNA = E_ext_dsDNA_wlc(ex_ds, nbp=nbp, pitch=pitch,
                                       L_p=L_p_dsDNA, T=T)
         e_unzip_DNA = E_unzip_DNA(bases, nuz=nuz, NNBP=NNBP, c=c, T=T)
         e_lev = np.sum(E_lev(d, kappa))
