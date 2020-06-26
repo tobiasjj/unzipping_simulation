@@ -113,6 +113,7 @@ WLC/FJC extension/force/energy models:
 #   E_ext_ssDNA buffered
 #     ext_dsDNA_wlc buffered
 #       F_ssDNA buffered
+#                        without_b   buffer_calc with_b     total_one_run
 # + + + - elapsed time:  138.7 s  -> 34.675 s + 121.9 s ->  156.575 s   371 %  -> only feasable, if calculated ~ 12 x
 # + - + - elapsed time:  168.6 s  ->                         42.15 s    100 %  -> only feasable, if 10 s per calculation important
 # + + - - elapsed time: 2853.1 s  -> 713.275 s + 121.9 s -> 835.175 s  1981 %
@@ -2186,14 +2187,14 @@ def get_energies(simulation, displacement=None, force=None, nuz=None,
     if displacement is None or force is None or nuz is None:
         sim_values = get_simulation_values(simulation, fe_xyz=True)
     D = sim_values['displacementXYZ'] if displacement is None else displacement
-    F = sim_values['force'] if force is None else force
-    NUZ = sim_values['nuz'] if nuz is None else nuz
+    F = sim_values['force'].astype(float) if force is None else force
+    NUZ = sim_values['nuz'].astypte(float) if nuz is None else nuz
     NBS = simulation['settings']['nbs'] + NUZ * 2
 
     # Set DNA model functions to the unbuffered default functions
-    # Initialize the approximations of the ssDNA/dsDNA model functions with
+    # Initialize the approximations of the dsDNA extension model function with
     # fixed model function parameters and substitute the original DNA model
-    # functions
+    # function on the module level
     global F_ssDNA
     global E_ext_ssDNA
     global ext_dsDNA_wlc
