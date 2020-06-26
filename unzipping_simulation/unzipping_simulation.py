@@ -2144,7 +2144,9 @@ def get_weighted_energies(simulation):
     return E0s_avg
 
 
-def get_energies(simulation, displacement=None, force=None, nuz=None):
+def get_energies(simulation, displacement=None, force=None, nuz=None,
+                 F_ssDNA_mod=None, E_ext_ssDNA_mod=None,
+                 ext_dsDNA_wlc_mod=None):
     """
     Get energies from simulation
 
@@ -2187,6 +2189,29 @@ def get_energies(simulation, displacement=None, force=None, nuz=None):
     F = sim_values['force'] if force is None else force
     NUZ = sim_values['nuz'] if nuz is None else nuz
     NBS = simulation['settings']['nbs'] + NUZ * 2
+
+    # Set DNA model functions to the unbuffered default functions
+    # Initialize the approximations of the ssDNA/dsDNA model functions with
+    # fixed model function parameters and substitute the original DNA model
+    # functions
+    global F_ssDNA
+    global E_ext_ssDNA
+    global ext_dsDNA_wlc
+    F_ssDNA = F_ssDNA_mod or _F_ssDNA
+    E_ext_ssDNA = E_ext_ssDNA_mod or _E_ext_ssDNA
+    undefined = ext_dsDNA_wlc_mod is None
+    unbuffered = not isinstance(ext_dsDNA_wlc, EXT_DSDNA)
+    changed = (isinstance(ext_dsDNA_wlc, EXT_DSDNA)
+               and (ext_dsDNA_wlc._kwargs['pitch'] != pitch
+                    or ext_dsDNA_wlc._kwargs['L_p'] != L_p_dsDNA
+                    or ext_dsDNA_wlc._kwargs['T'] != T))
+    if undefined:
+        if unbuffered or changed:
+            ext_dsDNA_wlc_mod = init_buf_ext_dsDNA_wlc(nbp=nbp, pitch=pitch,
+                                                       L_p=L_p_dsDNA, T=T)
+        else:
+            ext_dsDNA_wlc_mod = ext_dsDNA_wlc
+    ext_dsDNA_wlc = ext_dsDNA_wlc_mod
 
     E_EXT_SSDNA = []
     E_EXT_DSDNA = []
