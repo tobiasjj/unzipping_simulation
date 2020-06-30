@@ -1934,8 +1934,7 @@ def E_tot(bases='', nuz=0, nbs=0, ex_ss=0.0, nbp=0, ex_ds=0.0,
 def plot_simulated_force_extension(simulation, x=None, y=None, yXYZ=None,
                                    axes=None, ylim=None, theta=False):
     # Get data to be plotted
-    sim_values = get_simulation_values(simulation, fe_xyz=True,
-                                       weighted_energies=False, theta=True),
+    sim_values = get_simulation_values(simulation, fe_xyz=True)
     e = sim_values['extension']
     f = sim_values['force']
     forceXYZ = sim_values['forceXYZ']
@@ -2057,7 +2056,7 @@ def plot_unzip_energy(x0, y0=0.0, h0=0.0, bases='', nuz_est=-1, nbs=0, nbp=0,
 
 
 def get_simulation_values(simulation, fe_xyz=False, weighted_energies=False,
-                          theta=False):
+                          energy_keys=None, theta=False):
     """
     Get extension, force, and number of unzipped basepairs of a simulation.
     """
@@ -2091,7 +2090,7 @@ def get_simulation_values(simulation, fe_xyz=False, weighted_energies=False,
         return_value['displacementXYZ'] = D0XYZ_avg
         return_value['forceXYZ'] = F0XYZ_avg
     if weighted_energies:
-        E0s_avg = get_weighted_energies(simulation)
+        E0s_avg = get_weighted_energies(simulation, keys=energy_keys)
         for key, E0_avg in E0s_avg.items():
             return_value[key] = E0_avg[idx_valid]
     if theta:
@@ -2104,7 +2103,7 @@ def get_simulation_values(simulation, fe_xyz=False, weighted_energies=False,
     return return_value
 
 
-def get_weighted_energies(simulation):
+def get_weighted_energies(simulation, keys=None, processes=8):
     """
     Get weighted and averaged energies from simulation
 
@@ -2112,6 +2111,8 @@ def get_weighted_energies(simulation):
     ----------
     simulation : dict
         The simulation to get the weighted averaged energies from.
+    keys : str or list of str
+        Energies to calculate weighted energies from.
 
     Returns
     -------
@@ -2119,26 +2120,45 @@ def get_weighted_energies(simulation):
         Weighted and averaged energies for ssDNA and dsDNA extension,
         lever/handle displacement, and basepair unzipping.
     """
-    E0s_avg = {
-        'e_ext_ssDNA': [],
-        'e_ext_dsDNA': [],
-        'e_unzip_DNA': [],
-        'e_lev': []
-    }
-
     # Get all unweighted energies for each simulation point and
     # calculate the averaged weighted energies
-    for XFE0 in simulation['XFE0']:
+    E0s_avg = {}
+    keys = get_energy_keys(keys=keys)
+    for key in keys:
+        E0s_avg[key] = []
+
+    # Speed up energy calculation with multiprocessing
+    # Per default buffer dsDNA_wlc model for all processes of multiprocessing
+    nbp = simulation['settings']['nbp']
+    pitch = simulation['settings']['pitch']
+    L_p_dsDNA = simulation['settings']['L_p_dsDNA']
+    T = simulation['settings']['T']
+    global ext_dsDNA_wlc
+    ext_dsDNA_wlc = init_buf_ext_dsDNA_wlc(nbp=nbp, pitch=pitch, L_p=L_p_dsDNA,
+                                           T=T)
+
+    # Defince closure to be used with multiprocessing
+    def f(i):
+        XFE0 = simulation['XFE0'][i]
         D0 = XFE0['D0']
         F0 = XFE0['F0']
         NUZ0 = XFE0['NUZ0']
         W0 = XFE0['W0']
         W0_sum = W0.sum()
-        E0s = get_energies(simulation, D0, F0, NUZ0)
-        for key, E0 in E0s.items():
-            E0s_avg[key].append(np.sum(E0 * W0) / W0_sum)
+        E0s = get_energies(simulation, D0, F0, NUZ0, keys=keys)
+        E0s_avg = []
+        for E0 in E0s.values():
+            E0s_avg.append(np.sum(E0 * W0) / W0_sum)
+        return E0s_avg
+    f = unboundfunction(f)
+
+    with Pool(processes=processes) as pool:
+        E0_avg_lists = pool.map(f, range(len(simulation['XFE0'])))
 
     # Convert lists to arrays
+    for E0_avg_list in E0_avg_lists:
+        for key, E0_avg in zip(keys, E0_avg_list):
+            E0s_avg[key].append(E0_avg)
     for key, E0_avg in E0s_avg.items():
         E0s_avg[key] = np.array(E0_avg)
 
@@ -2146,7 +2166,7 @@ def get_weighted_energies(simulation):
 
 
 def get_energies(simulation, displacement=None, force=None, nuz=None,
-                 F_ssDNA_mod=None, E_ext_ssDNA_mod=None,
+                 keys=None, F_ssDNA_mod=None, E_ext_ssDNA_mod=None,
                  ext_dsDNA_wlc_mod=None):
     """
     Get energies from simulation
@@ -2188,8 +2208,17 @@ def get_energies(simulation, displacement=None, force=None, nuz=None,
         sim_values = get_simulation_values(simulation, fe_xyz=True)
     D = sim_values['displacementXYZ'] if displacement is None else displacement
     F = sim_values['force'].astype(float) if force is None else force
-    NUZ = sim_values['nuz'].astypte(float) if nuz is None else nuz
+    NUZ = sim_values['nuz'].astype(float) if nuz is None else nuz
     NBS = simulation['settings']['nbs'] + NUZ * 2
+
+    keys = get_energy_keys(keys=keys)
+    e_ext_ssDNA = 'e_ext_ssDNA' in keys
+    e_ext_dsDNA = 'e_ext_dsDNA' in keys
+    e_unzip_DNA = 'e_unzip_DNA' in keys
+    e_lev = 'e_lev' in keys
+    Es = {}
+    for key in keys:
+        Es[key] = []
 
     # Set DNA model functions to the unbuffered default functions
     # Initialize the approximations of the dsDNA extension model function with
@@ -2200,46 +2229,53 @@ def get_energies(simulation, displacement=None, force=None, nuz=None,
     global ext_dsDNA_wlc
     F_ssDNA = F_ssDNA_mod or _F_ssDNA
     E_ext_ssDNA = E_ext_ssDNA_mod or _E_ext_ssDNA
-    undefined = ext_dsDNA_wlc_mod is None
-    unbuffered = not isinstance(ext_dsDNA_wlc, EXT_DSDNA)
-    changed = (isinstance(ext_dsDNA_wlc, EXT_DSDNA)
-               and (ext_dsDNA_wlc._kwargs['pitch'] != pitch
-                    or ext_dsDNA_wlc._kwargs['L_p'] != L_p_dsDNA
-                    or ext_dsDNA_wlc._kwargs['T'] != T))
-    if undefined:
-        if unbuffered or changed:
-            ext_dsDNA_wlc_mod = init_buf_ext_dsDNA_wlc(nbp=nbp, pitch=pitch,
-                                                       L_p=L_p_dsDNA, T=T)
-        else:
-            ext_dsDNA_wlc_mod = ext_dsDNA_wlc
-    ext_dsDNA_wlc = ext_dsDNA_wlc_mod
+    if e_ext_dsDNA:
+        undefined = ext_dsDNA_wlc_mod is None
+        unbuffered = not isinstance(ext_dsDNA_wlc, EXT_DSDNA)
+        changed = (isinstance(ext_dsDNA_wlc, EXT_DSDNA)
+                   and (ext_dsDNA_wlc._kwargs['pitch'] != pitch
+                        or ext_dsDNA_wlc._kwargs['L_p'] != L_p_dsDNA
+                        or ext_dsDNA_wlc._kwargs['T'] != T))
+        if undefined:
+            if unbuffered or changed:
+                ext_dsDNA_wlc_mod = init_buf_ext_dsDNA_wlc(nbp=nbp, pitch=pitch,
+                                                           L_p=L_p_dsDNA, T=T)
+            else:
+                ext_dsDNA_wlc_mod = ext_dsDNA_wlc
+        ext_dsDNA_wlc = ext_dsDNA_wlc_mod
 
-    E_EXT_SSDNA = []
-    E_EXT_DSDNA = []
-    E_UNZIP_DNA = []
-    E_LEV = []
     for d, f, nuz, nbs in zip(D, F, NUZ, NBS):
-        ex_ss = ext_ssDNA(f, nbs=nbs, S=S, L_p=L_p_ssDNA, z=z, T=T)
-        ex_ds = ext_dsDNA_wlc(f, nbp=nbp, pitch=pitch, L_p=L_p_dsDNA, T=T)
-        e_ext_ssDNA = E_ext_ssDNA(ex_ss, nbs=nbs, S=S, L_p=L_p_ssDNA, z=z, T=T)
-        e_ext_dsDNA = E_ext_dsDNA_wlc(ex_ds, nbp=nbp, pitch=pitch,
-                                      L_p=L_p_dsDNA, T=T)
-        e_unzip_DNA = E_unzip_DNA(bases, nuz=nuz, NNBP=NNBP, c=c, T=T)
-        e_lev = np.sum(E_lev(d, kappa))
+        if e_ext_ssDNA:
+            ex_ss = ext_ssDNA(f, nbs=nbs, S=S, L_p=L_p_ssDNA, z=z, T=T)
+            e = E_ext_ssDNA(ex_ss, nbs=nbs, S=S, L_p=L_p_ssDNA, z=z, T=T)
+            Es['e_ext_ssDNA'].append(e)
+        if e_ext_dsDNA:
+            ex_ds = ext_dsDNA_wlc(f, nbp=nbp, pitch=pitch, L_p=L_p_dsDNA, T=T)
+            e = E_ext_dsDNA_wlc(ex_ds, nbp=nbp, pitch=pitch, L_p=L_p_dsDNA,
+                                T=T)
+            Es['e_ext_dsDNA'].append(e)
+        if e_unzip_DNA:
+            e =  E_unzip_DNA(bases, nuz=nuz, NNBP=NNBP, c=c, T=T)
+            Es['e_unzip_DNA'].append(e)
+        if e_lev:
+            e = np.sum(E_lev(d, kappa))
+            Es['e_lev'].append(e)
 
-        E_EXT_SSDNA.append(e_ext_ssDNA)
-        E_EXT_DSDNA.append(e_ext_dsDNA)
-        E_UNZIP_DNA.append(e_unzip_DNA)
-        E_LEV.append(e_lev)
+    for key, e in Es.items():
+        Es[key] = np.array(e)
 
-    energies = {
-        'e_ext_ssDNA': np.array(E_EXT_SSDNA),
-        'e_ext_dsDNA': np.array(E_EXT_DSDNA),
-        'e_unzip_DNA': np.array(E_UNZIP_DNA),
-        'e_lev': np.array(E_LEV)
-    }
+    return Es
 
-    return energies
+
+def get_energy_keys(keys=None):
+    keys = [keys] if isinstance(keys, str) else keys
+    if keys is None:
+        keys = [
+            'e_ext_ssDNA',
+            'e_ext_dsDNA',
+            'e_unzip_DNA',
+            'e_lev' ]
+    return keys
 
 
 class unboundfunction(object):
