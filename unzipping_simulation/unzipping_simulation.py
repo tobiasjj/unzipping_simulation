@@ -1264,7 +1264,9 @@ def F_construct_2D(x0, z0=0.0, ex_ss=0.0, ex_ds=0.0, radius=0.0, kappa=0.0,
     # construct is longer than possible stretching with dx/dz >= 0.
     # -> bead will equilibrate in the middle of the trap with zero force
     if c**2 >= x0**2 + (z0_r)**2:
-        return 0.0, (0.0, 0.0)
+        fxz = 0.0
+        dxz = np.array([0.0, 0.0])
+        return fxz, dxz
 
     # If z0 is 0 or the stiffness of z is 0 bead will always
     # touch the surface and dx only depends on x0, ex_ss, ex_ds, and r.
@@ -1273,13 +1275,15 @@ def F_construct_2D(x0, z0=0.0, ex_ss=0.0, ex_ds=0.0, radius=0.0, kappa=0.0,
             kappa = kappa[0]
         dx = x0 - math.sqrt(c**2 - r**2)
         dz = z0
+        dxz = np.array([dx, dz])
+
         # force that need to be acting on the construct to
         # result in a corresponding horizontal force (in x/y)
         fx = dx * kappa  # * (x0 - dx) / c
         cos_alpha = (x0 - dx) / c
         fxz = fx / cos_alpha
 
-        return fxz, (dx, dz)
+        return fxz, dxz
 
     # displacement dz dependent upon dx
     def _dz(dx):
@@ -1344,7 +1348,8 @@ def F_construct_2D(x0, z0=0.0, ex_ss=0.0, ex_ds=0.0, radius=0.0, kappa=0.0,
     # #      ''.format(dx, _dz(dx), dx*kappa[0], _dz(dx)*kappa[1]))
     # #print('dzmin {:.1e}, dzmax {:.1e}, dxmin {:.1e}, dxmax {:.1e}, f {:.1e}'
     # #      ''.format(dz_min, dz_max, dx_min, dx_max, f(dx)))
-    return fxz, (dx, _dz(dx))
+    dxz = np.array([dx, _dz(dx)])
+    return fxz, dxz
 
 
 def F_construct_3D(A0, ex_ss=0.0, ex_ds=0.0, f_dna=0.0, radius=0.0, kappa=None,
@@ -1426,7 +1431,7 @@ def F_construct_3D(A0, ex_ss=0.0, ex_ds=0.0, f_dna=0.0, radius=0.0, kappa=None,
     else:
         # Fit the angles of the DNA/bead construct
         angles_c, success_c \
-            = minimize_angle_cost(A0, l_c, radius, kappa, init_c=angles_c,
+            = minimize_angle_cost(A0, l_c, radius, kappa, init_c=None,
                                   factr=factr, gtol=gtol,
                                   eps=eps_angle, verbose=deep_verbose,
                                   print_result=print_result)
