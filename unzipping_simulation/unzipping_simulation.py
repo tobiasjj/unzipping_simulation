@@ -1944,7 +1944,9 @@ def plot_simulated_force_extension(simulation, x=None, y=None, yXYZ=None,
     f = sim_values['force']
     forceXYZ = sim_values['forceXYZ']
     nuz = sim_values['nuz']
-    th = sim_values['theta']
+    theta = theta if 'theta' in sim_values else False
+    if theta:
+        th = sim_values['theta']
 
     if axes is None:
         fig, axes = plt.subplots(2, 1)
