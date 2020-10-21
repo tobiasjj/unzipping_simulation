@@ -2066,6 +2066,11 @@ def get_simulation_values(simulation, fe_xyz=False, weighted_energies=False,
                           energy_keys=None, theta=False):
     """
     Get extension, force, and number of unzipped basepairs of a simulation.
+
+    Parmaters
+    ---------
+    energy_keys : list of str
+        Defaults to [ 'e_ext_ssDNA', 'e_ext_dsDNA', 'e_unzip_DNA', 'e_lev' ]
     """
     # Set variables of simulated data
     XFE, XFE0 = simulation['XFE'], simulation['XFE0']
@@ -2119,7 +2124,8 @@ def get_weighted_energies(simulation, keys=None, processes=8):
     simulation : dict
         The simulation to get the weighted averaged energies from.
     keys : str or list of str
-        Energies to calculate weighted energies from.
+        Energies to calculate weighted energies from. Defaults to
+        [ 'e_ext_ssDNA', 'e_ext_dsDNA', 'e_unzip_DNA', 'e_lev' ].
 
     Returns
     -------
