@@ -1939,7 +1939,7 @@ def E_tot(bases='', nuz=0, nbs=0, ex_ss=0.0, nbp=0, ex_ds=0.0,
 def plot_simulated_force_extension(simulation, x=None, y=None, yXYZ=None,
                                    axes=None, ylim=None, theta=False):
     # Get data to be plotted
-    sim_values = get_simulation_values(simulation, fe_xyz=True)
+    sim_values = get_simulation_values(simulation, df_xyz=True)
     e = sim_values['extension']
     f = sim_values['force']
     forceXYZ = sim_values['forceXYZ']
@@ -2062,15 +2062,21 @@ def plot_unzip_energy(x0, y0=0.0, h0=0.0, bases='', nuz_est=-1, nbs=0, nbp=0,
     return fig, ax, ax2
 
 
-def get_simulation_values(simulation, fe_xyz=False, weighted_energies=False,
-                          energy_keys=None, theta=False):
+def get_simulation_values(simulation, df_xyz=False, weighted_energies=False,
+                          energy_keys=None):
     """
     Get extension, force, and number of unzipped basepairs of a simulation.
 
     Parmaters
     ---------
+    df_xyz : bool
+        Return the individual xyz components of displacement and force.
+    weighted_energies : bool
+        Calculate and return weighted and averaged energies as returned by the
+        the function `get_weighted_energies()`.
     energy_keys : list of str
-        Defaults to [ 'e_ext_ssDNA', 'e_ext_dsDNA', 'e_unzip_DNA', 'e_lev' ]
+        Energies to be calculated. Possible options and defaulting to
+        [ 'e_ext_ssDNA', 'e_ext_dsDNA', 'e_unzip_DNA', 'e_lev' ].
     """
     # Set variables of simulated data
     XFE, XFE0 = simulation['XFE'], simulation['XFE0']
@@ -2091,7 +2097,7 @@ def get_simulation_values(simulation, fe_xyz=False, weighted_energies=False,
         'force': XFE['F0_avg'][idx_valid],
         'nuz': XFE['NUZ0_avg'][idx_valid]
     }
-    if fe_xyz:
+    if df_xyz:
         kappa = XFE['settings']['kappa']
         try:
             D0XYZ_avg = XFE['D0_avg'][idx_valid]
@@ -2105,12 +2111,6 @@ def get_simulation_values(simulation, fe_xyz=False, weighted_energies=False,
         E0s_avg = get_weighted_energies(simulation, keys=energy_keys)
         for key, E0_avg in E0s_avg.items():
             return_value[key] = E0_avg[idx_valid]
-    if theta:
-        try:
-            THETA_DIFF = XFE['DA0_avg'][:,0]
-        except KeyError:
-            THETA_DIFF = np.zeros_like(EX_avg)
-        return_value['theta'] = THETA_DIFF[idx_valid]
 
     return return_value
 
@@ -2124,7 +2124,7 @@ def get_weighted_energies(simulation, keys=None, processes=8):
     simulation : dict
         The simulation to get the weighted averaged energies from.
     keys : str or list of str
-        Energies to calculate weighted energies from. Defaults to
+        Energies to be calculated. Possible values are and defaulting to
         [ 'e_ext_ssDNA', 'e_ext_dsDNA', 'e_unzip_DNA', 'e_lev' ].
 
     Returns
@@ -2133,15 +2133,8 @@ def get_weighted_energies(simulation, keys=None, processes=8):
         Weighted and averaged energies for ssDNA and dsDNA extension,
         lever/handle displacement, and basepair unzipping.
     """
-    # Get all unweighted energies for each simulation point and
-    # calculate the averaged weighted energies
-    E0s_avg = {}
-    keys = get_energy_keys(keys=keys)
-    for key in keys:
-        E0s_avg[key] = []
-
-    # Speed up energy calculation with multiprocessing
-    # Per default buffer dsDNA_wlc model for all processes of multiprocessing
+    # Speed up energy calculation with multiprocessing and per buffering of the
+    # dsDNA_wlc model for all processes of multiprocessing
     nbp = simulation['settings']['nbp']
     pitch = simulation['settings']['pitch']
     L_p_dsDNA = simulation['settings']['L_p_dsDNA']
@@ -2150,8 +2143,13 @@ def get_weighted_energies(simulation, keys=None, processes=8):
     ext_dsDNA_wlc = init_buf_ext_dsDNA_wlc(nbp=nbp, pitch=pitch, L_p=L_p_dsDNA,
                                            T=T)
 
+    # Define the keys of the energies to be calculated
+    keys = get_energy_keys(keys=keys)
+
     # Defince closure to be used with multiprocessing
     def f(i):
+        # Get all unweighted energies for simulation point `i` and calculate
+        # the averaged weighted energies
         XFE0 = simulation['XFE0'][i]
         D0 = XFE0['D0']
         F0 = XFE0['F0']
@@ -2165,10 +2163,16 @@ def get_weighted_energies(simulation, keys=None, processes=8):
         return E0s_avg
     f = unboundfunction(f)
 
+    # Get all averaged and weighted energies for all simulation points
     with Pool(processes=processes) as pool:
         E0_avg_lists = pool.map(f, range(len(simulation['XFE0'])))
 
-    # Convert lists to arrays
+
+    # Get and combine all calculated energy points according to their key and
+    # finally convert lists to arrays
+    E0s_avg = {}
+    for key in keys:
+        E0s_avg[key] = []
     for E0_avg_list in E0_avg_lists:
         for key, E0_avg in zip(keys, E0_avg_list):
             E0s_avg[key].append(E0_avg)
@@ -2218,7 +2222,7 @@ def get_energies(simulation, displacement=None, force=None, nuz=None,
 
     # Calculate all NUZs and NBSs
     if displacement is None or force is None or nuz is None:
-        sim_values = get_simulation_values(simulation, fe_xyz=True)
+        sim_values = get_simulation_values(simulation, df_xyz=True)
     D = sim_values['displacementXYZ'] if displacement is None else displacement
     F = sim_values['force'].astype(float) if force is None else force
     NUZ = sim_values['nuz'].astype(float) if nuz is None else nuz
