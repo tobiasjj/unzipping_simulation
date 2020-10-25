@@ -2062,13 +2062,20 @@ def plot_unzip_energy(x0, y0=0.0, h0=0.0, bases='', nuz_est=-1, nbs=0, nbp=0,
     return fig, ax, ax2
 
 
-def get_simulation_values(simulation, df_xyz=False, weighted_energies=False,
+def get_simulation_values(simulation, extension=True, force=True, nuz=True,
+                          df_xyz=False, weighted_energies=False,
                           energy_keys=None):
     """
     Get extension, force, and number of unzipped basepairs of a simulation.
 
     Parmaters
     ---------
+    extension : bool
+        Return the extension.
+    force : bool
+        Return the force.
+    nuz : bool
+        Return the number of unzipped basepairs.
     df_xyz : bool
         Return the individual xyz components of displacement and force.
     weighted_energies : bool
@@ -2092,20 +2099,22 @@ def get_simulation_values(simulation, df_xyz=False, weighted_energies=False,
     # Select data which was properly fitted
     idx_valid = (EX_avg != 0)
 
-    return_value = {
-        'extension': EX_avg[idx_valid],
-        'force': XFE['F0_avg'][idx_valid],
-        'nuz': XFE['NUZ0_avg'][idx_valid]
-    }
+    return_value = {}
+    if extension:
+        return_value['extension'] = EX_avg[idx_valid]
+    if force:
+        return_value['force'] = XFE['F0_avg'][idx_valid]
+    if nuz:
+        return_value['nuz'] = XFE['NUZ0_avg'][idx_valid]
     if df_xyz:
-        kappa = XFE['settings']['kappa']
         try:
             D0XYZ_avg = XFE['D0_avg'][idx_valid]
         except KeyError:
             # Old simulation object
             D0XYZ_avg =  np.array([xfe0['D0_avg'] for xfe0 in XFE0])
-        F0XYZ_avg = kappa * D0XYZ_avg
         return_value['displacementXYZ'] = D0XYZ_avg
+        kappa = XFE['settings']['kappa']
+        F0XYZ_avg = kappa * D0XYZ_avg
         return_value['forceXYZ'] = F0XYZ_avg
     if weighted_energies:
         E0s_avg = get_weighted_energies(simulation, keys=energy_keys)
